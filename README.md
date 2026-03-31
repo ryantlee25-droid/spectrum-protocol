@@ -40,7 +40,7 @@ Spectrum defines 14 agents across two tiers: the **core pipeline** (10 agents th
 
 ## Protocol Phases
 
-A Spectrum run follows seven phases, named after key events in Red Rising:
+A Spectrum run follows seven phases:
 
 | Phase | Name | What Happens |
 |-------|------|-------------|
