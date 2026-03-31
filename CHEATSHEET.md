@@ -22,17 +22,17 @@ Triumph       Human merges, Obsidian verifies spec compliance
 ## Agents
 
 ```
-Gold      ♛  Commands the spectrum          (Opus)
-Blue      ◎  Plans work → PLAN.md           (Sonnet)
-Howler    »  Builds in parallel worktrees   (Sonnet)
-White     ✦  Reviews code before PR         (Sonnet)
-Gray      ⛨  Runs tests + coverage          (Sonnet)
-Orange    ✧  Debugs root causes             (Sonnet)
-Copper    ▶  Commits, branches, PRs         (Haiku)
-Obsidian  ⊘  Verifies spec after merge      (Sonnet)
-Brown     ⌂  Records lessons learned        (Haiku)
-Violet    ~  Designs API/schema specs       (Sonnet)
-Politico  ⚡  Challenges plans before freeze (Sonnet)
+Golds     ♛  Commands the spectrum          (Opus)
+Blues      ◎  Plans work → PLAN.md           (Sonnet)
+Howlers   »  Builds in parallel worktrees   (Sonnet)
+Whites    ✦  Reviews code before PR         (Sonnet)
+Grays     ⛨  Runs tests + coverage          (Sonnet)
+Oranges   ✧  Debugs root causes             (Sonnet)
+Coppers   ▶  Commits, branches, PRs         (Haiku)
+Obsidians ⊘  Verifies spec after merge      (Sonnet)
+Browns    ⌂  Records lessons learned        (Haiku)
+Violets   ~  Designs API/schema specs       (Sonnet)
+Politicos ⚡  Challenges plans before freeze (Sonnet)
 ```
 
 ## Key Artifacts

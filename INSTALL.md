@@ -48,7 +48,7 @@ mkdir -p ~/.claude/agents
 cp agents/*.md ~/.claude/agents/
 ```
 
-This installs all 14 agent definitions (Gold, Blue, Howler, White, Gray, Orange, Copper, Obsidian, Brown, Violet, Politico, Helldiver, Primus, Green) plus backward-compatibility symlinks (mayor→gold, rider→howler, etc.) so Claude Code's built-in `subagent_type` names continue to work.
+This installs all 14 agent definitions (Golds, Blues, Howlers, Whites, Grays, Oranges, Coppers, Obsidians, Browns, Violets, Politicos, Helldivers, Primus, Greens) plus backward-compatibility symlinks (mayor→golds, rider→howlers, etc.) so Claude Code's built-in `subagent_type` names continue to work.
 
 ### 3. Copy tooling
 
@@ -104,7 +104,7 @@ rm ~/.claude/CLAUDE.md
 rm ~/.claude/SPECTRUM-OPS.md
 rm ~/.claude/SPECTRUM.md
 rm ~/.claude/hooks/seam_check.py
-rm ~/.claude/agents/{gold,blue,howler,white,gray,orange,copper,obsidian,brown,violet,politico,helldiver,primus,green}.md
+rm ~/.claude/agents/{golds,blues,howlers,whites,grays,oranges,coppers,obsidians,browns,violets,politicos,helldivers,primus,greens}.md
 ```
 
 This leaves your `~/.claude/` directory intact for standard Claude Code usage.

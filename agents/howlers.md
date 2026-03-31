@@ -1,5 +1,5 @@
 ---
-name: howler
+name: howlers
 description: "Spectrum implementation agent. Executes a scoped task from a spectrum manifest — reads CONTRACT.md, writes HOOK.md for crash recovery, and produces a PR-ready branch. Spawned by Gold during parallel spectrum execution.\n\n<example>\nuser: large multi-step task dispatched via spectrum\nassistant: Gold drops Howler agents for each independent task in the manifest\n</example>"
 model: sonnet
 color: orange

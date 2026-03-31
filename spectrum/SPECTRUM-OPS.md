@@ -8,16 +8,16 @@
 
 | Role | `subagent_type` | Model | Glyph | Purpose |
 |------|----------------|-------|-------|---------|
-| Gold | `gold` | opus | ♛ | Muster, contracts, seam analysis, merge planning |
-| Blue | `blue` | sonnet | ◎ | Plan work → PLAN.md (before Spectrum) |
-| Howler | `howler` | sonnet+ | » | Implement tasks in isolated worktrees |
-| White | `white` | sonnet | ✦ | Pre-PR diff review, contract compliance |
-| Gray | `gray` | sonnet | ⛨ | Run tests, diagnose failures, write coverage |
-| Orange | `orange` | sonnet | ✧ | Root cause analysis on blocked Howlers |
-| Copper | `copper` | haiku | ▶ | Commits, branches, PRs |
-| Obsidian | `obsidian` | sonnet | ⊘ | Post-merge spec compliance against PLAN.md |
-| Brown | `brown` | haiku | ⌂ | Draft LESSONS.md from Spectrum artifacts |
-| Politico | `politico` | sonnet | ⚡ | Adversarial review of CONTRACT.md + MANIFEST.md before freeze |
+| Golds | `golds` | opus | ♛ | Muster, contracts, seam analysis, merge planning |
+| Blues | `blues` | sonnet | ◎ | Plan work → PLAN.md (before Spectrum) |
+| Howlers | `howlers` | sonnet+ | » | Implement tasks in isolated worktrees |
+| Whites | `whites` | sonnet | ✦ | Pre-PR diff review, contract compliance |
+| Grays | `grays` | sonnet | ⛨ | Run tests, diagnose failures, write coverage |
+| Oranges | `oranges` | sonnet | ✧ | Root cause analysis on blocked Howlers |
+| Coppers | `coppers` | haiku | ▶ | Commits, branches, PRs |
+| Obsidians | `obsidians` | sonnet | ⊘ | Post-merge spec compliance against PLAN.md |
+| Browns | `browns` | haiku | ⌂ | Draft LESSONS.md from Spectrum artifacts |
+| Politicos | `politicos` | sonnet | ⚡ | Adversarial review of CONTRACT.md + MANIFEST.md before freeze |
 
 ---
 

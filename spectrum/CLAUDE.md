@@ -14,13 +14,13 @@ It applies across all projects unless overridden by a project-level `CLAUDE.md`.
 - **Orange** (Sonnet) — root cause analysis, fix proposals
 - **Copper** (Haiku) — commits, branch naming, PR/MR creation on GitHub or GitLab
 - **Howlers** (Sonnet floor) — implementation in spectrum worktrees; inherit session model but never below Sonnet
-- **Obsidian** (Sonnet) — post-merge spec compliance verification against PLAN.md acceptance criteria
-- **Brown** (Haiku) — drafts LESSONS.md + ENTITIES.md updates from spectrum artifacts; Gold reviews before committing
-- **Violet** (Sonnet) — optional Phase 0.5: produces DESIGN.md (behavioral spec) for API/schema spectrum runs
-- **Politico** (Sonnet) — Phase 1.5: adversarial review of CONTRACT.md + MANIFEST.md before freeze; finds ownership gaps, contract ambiguities, decomposition flaws
+- **Obsidians** (Sonnet) — post-merge spec compliance verification against PLAN.md acceptance criteria
+- **Browns** (Haiku) — drafts LESSONS.md + ENTITIES.md updates from spectrum artifacts; Gold reviews before committing
+- **Violets** (Sonnet) — optional Phase 0.5: produces DESIGN.md (behavioral spec) for API/schema spectrum runs
+- **Politicos** (Sonnet) — Phase 1.5: adversarial review of CONTRACT.md + MANIFEST.md before freeze; finds ownership gaps, contract ambiguities, decomposition flaws
 
 Additional agents (not part of Spectrum pipeline — see `~/.claude/AGENTS.md`):
-- **Helldiver**, **Primus**, **Green**
+- **Helldivers**, **Primus**, **Greens**
 
 ---
 
@@ -227,17 +227,17 @@ Coverage gaps and security high/medium findings are warnings, not blockers. Note
 
 | Agent | Model | Rationale |
 |---|---|---|
-| Gold (`mayor`) | **opus** | Hardest cognitive work: task decomposition, file ownership conflict detection, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Judgment-heavy synthesis. Sonnet cuts corners on integration. |
-| Blue (`scout`) | **sonnet** | PLAN.md feeds directly into muster. A bad plan cascades through the entire spectrum. Sonnet is the minimum for scoping tasks and anticipating file conflicts. |
+| Golds (`mayor`) | **opus** | Hardest cognitive work: task decomposition, file ownership conflict detection, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Judgment-heavy synthesis. Sonnet cuts corners on integration. |
+| Blues (`scout`) | **sonnet** | PLAN.md feeds directly into muster. A bad plan cascades through the entire spectrum. Sonnet is the minimum for scoping tasks and anticipating file conflicts. |
 | Howlers (`rider`) | **sonnet** (floor) | Implementation is Sonnet's sweet spot. Haiku passes tests but misses architectural intent from the contract. Howlers inherit session model but never below Sonnet. |
-| White (`inspector`) | **sonnet** | Reasoning depth for subtle bugs, security issues, and contract compliance. |
-| Gray (`outrider`) | **sonnet** | Diagnosing failures and writing missing tests (required by quality gate) needs Sonnet-level reasoning. Haiku misdiagnoses flaky tests and writes superficial coverage. |
-| Orange (`mechanic`) | **sonnet** | Root cause tracing across call stacks. |
-| Copper (`courier`) | **haiku** | Commits, branch naming, PR creation are mechanical. Haiku is fine. |
-| Obsidian (`sentinel`) | **sonnet** | Spec compliance requires reading PLAN.md criteria and verifying against merged code. Needs reasoning depth. |
-| Brown (`archivist`) | **haiku** | Aggregating HOOK.md, debrief, and timing data into LESSONS.md is mechanical. Gold reviews the draft. |
-| Violet (`designer`) | **sonnet** | Behavioral spec (API contracts, schema, component hierarchy) requires understanding cross-module interactions. |
-| Politico (`critic`) | **sonnet** | Adversarial review requires reasoning about what could go wrong with the decomposition. Must be independent from Gold to avoid confirmation bias. |
+| Whites (`inspector`) | **sonnet** | Reasoning depth for subtle bugs, security issues, and contract compliance. |
+| Grays (`outrider`) | **sonnet** | Diagnosing failures and writing missing tests (required by quality gate) needs Sonnet-level reasoning. Haiku misdiagnoses flaky tests and writes superficial coverage. |
+| Oranges (`mechanic`) | **sonnet** | Root cause tracing across call stacks. |
+| Coppers (`courier`) | **haiku** | Commits, branch naming, PR creation are mechanical. Haiku is fine. |
+| Obsidians (`sentinel`) | **sonnet** | Spec compliance requires reading PLAN.md criteria and verifying against merged code. Needs reasoning depth. |
+| Browns (`archivist`) | **haiku** | Aggregating HOOK.md, debrief, and timing data into LESSONS.md is mechanical. Gold reviews the draft. |
+| Violets (`designer`) | **sonnet** | Behavioral spec (API contracts, schema, component hierarchy) requires understanding cross-module interactions. |
+| Politicos (`critic`) | **sonnet** | Adversarial review requires reasoning about what could go wrong with the decomposition. Must be independent from Gold to avoid confirmation bias. |
 
 ---
 

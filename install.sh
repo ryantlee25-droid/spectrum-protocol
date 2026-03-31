@@ -41,7 +41,7 @@ curl -fsSL "$REPO/spectrum/SPECTRUM-OPS.md" -o "$CLAUDE_DIR/SPECTRUM-OPS.md"
 curl -fsSL "$REPO/spectrum/SPECTRUM.md" -o "$CLAUDE_DIR/SPECTRUM.md"
 
 echo "  [3/5] Downloading agent definitions (14 agents)..."
-for agent in gold blue howler white gray orange copper obsidian brown violet politico helldiver primus green; do
+for agent in golds blues howlers whites grays oranges coppers obsidians browns violets politicos helldivers primus greens; do
     curl -fsSL "$REPO/agents/$agent.md" -o "$AGENTS_DIR/$agent.md"
 done
 

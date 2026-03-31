@@ -12,24 +12,24 @@ Inspired by [steveyegge/gastown](https://github.com/steveyegge/gastown). Adapted
 
 | Name | `subagent_type` | Role | Model | Color |
 |------|----------------|------|-------|-------|
-| **Gold** ♛ | `gold` | Orchestrator -- muster, contracts, seam analysis, merge planning | Opus | Yellow |
-| **Blue** ◎ | `blue` | Planner -- scopes work, produces PLAN.md before spectrum activates | Sonnet | Blue |
-| **Howlers** » | `howler` | Workers -- implement tasks in isolated worktrees | Sonnet (floor) | Orange |
-| **White** ✦ | `white` | Code reviewer -- pre-PR diff review, contract compliance | Sonnet | Purple |
-| **Gray** ⛨ | `gray` | Test runner -- runs tests, diagnoses failures, writes missing coverage | Sonnet | Cyan |
-| **Orange** ✧ | `orange` | Debugger -- root cause analysis when Howlers hit blockers | Sonnet | Red |
-| **Copper** ▶ | `copper` | Delivery -- commits, branch naming, PR creation | Haiku | Gray |
-| **Obsidian** ⊘ | `obsidian` | Spec compliance -- post-merge verification against PLAN.md acceptance criteria | Sonnet | Teal |
-| **Brown** ⌂ | `brown` | Retrospective -- drafts LESSONS.md from HOOK.md, debriefs, White reports, timing | Haiku | Overlay |
-| **Politico** ⚡ | `politico` | Adversarial -- challenges CONTRACT.md + MANIFEST.md before freeze (Phase 1.5) | Sonnet | Amber |
+| **Golds** ♛ | `golds` | Orchestrator -- muster, contracts, seam analysis, merge planning | Opus | Gold |
+| **Blues** ◎ | `blues` | Planner -- scopes work, produces PLAN.md before spectrum activates | Sonnet | Blue |
+| **Howlers** » | `howlers` | Workers -- implement tasks in isolated worktrees | Sonnet (floor) | Orange |
+| **Whites** ✦ | `whites` | Code reviewer -- pre-PR diff review, contract compliance | Sonnet | White |
+| **Grays** ⛨ | `grays` | Test runner -- runs tests, diagnoses failures, writes missing coverage | Sonnet | Gray |
+| **Oranges** ✧ | `oranges` | Debugger -- root cause analysis when Howlers hit blockers | Sonnet | Orange |
+| **Coppers** ▶ | `coppers` | Delivery -- commits, branch naming, PR creation | Haiku | Copper |
+| **Obsidians** ⊘ | `obsidians` | Spec compliance -- post-merge verification against PLAN.md acceptance criteria | Sonnet | Obsidian |
+| **Browns** ⌂ | `browns` | Retrospective -- drafts LESSONS.md from HOOK.md, debriefs, White reports, timing | Haiku | Brown |
+| **Politicos** ⚡ | `politicos` | Adversarial -- challenges CONTRACT.md + MANIFEST.md before freeze (Phase 1.5) | Sonnet | Amber |
 
 Auxiliary agents (not part of spectrum -- see `~/.claude/AGENTS.md`):
 
 | Name | `subagent_type` | Role | Model | Color |
 |------|----------------|------|-------|-------|
-| **Helldiver** ◈ | `helldiver` | Problem research, validation, opportunity sizing | Sonnet | Yellow |
-| **Primus** ⊕ | `primus` | PRDs, prioritization, roadmaps, strategy | Sonnet | Green |
-| **Green** ≡ | `green` | Decompose specs into scoped Jira tickets | Sonnet | Blue |
+| **Helldivers** ◈ | `helldivers` | Problem research, validation, opportunity sizing | Sonnet | Red |
+| **Primus** ⊕ | `primus` | PRDs, prioritization, roadmaps, strategy | Sonnet | Gold |
+| **Greens** ≡ | `greens` | Decompose specs into scoped Jira tickets | Sonnet | Green |
 
 Agent definitions live in `~/.claude/agents/{role-name}.md`. Claude Code's built-in agent names (`code-reviewer`, `test-runner`, etc.) are preserved as aliases in the role detection system for backward compatibility.
 
@@ -397,7 +397,7 @@ export interface AuthResponse {
 
 ### 1.4 Adversarial Plan Review (Phase 1.5)
 
-Before freezing CONTRACT.md, Gold spawns a **Politico** (Sonnet, uses `inspector` subagent_type) to adversarially review the plan. Politico is a separate agent — not Gold reviewing its own work — to avoid confirmation bias.
+Before freezing CONTRACT.md, Gold spawns a **Politicos** agent (Sonnet) to adversarially review the plan. Politico is a separate agent — not Gold reviewing its own work — to avoid confirmation bias.
 
 **Politico prompt template:**
 
@@ -1265,7 +1265,7 @@ Obsidian closes the loop between planning and delivery. It verifies that what wa
 Gold spawns the Obsidian agent with:
 
 ```
-Agent(model="sonnet", subagent_type="sentinel", prompt="
+Agent(model="sonnet", subagent_type="obsidians", prompt="
   Spectrum: {rain-id}
   Role: Obsidian — spec compliance verification
 
@@ -1338,7 +1338,7 @@ This phase captures what worked and what didn't, so future spectrum runs on the 
 **Brown dispatch:**
 
 ```
-Agent(model="haiku", subagent_type="archivist", prompt="
+Agent(model="haiku", subagent_type="browns", prompt="
   Spectrum: {rain-id}
   Role: Brown — retrospective drafting
 
@@ -1676,7 +1676,7 @@ Gold writes (or updates) CHECKPOINT.json at these moments:
 | PAX-PLAN.md written | `merge_ready` | Phase advance |
 | Each PR merged | `merging` | Howler `merged: true` |
 | All PRs merged, Gray running | `post_merge` | Phase advance |
-| Obsidian complete | `obsidian` | Obsidian verdict recorded |
+| Obsidians complete | `obsidians` | Obsidians verdict recorded |
 | LESSONS.md written | `complete` | Terminal state |
 
 ### Session Recovery Protocol
@@ -2130,16 +2130,16 @@ Roles are detected by `convoy_roles.py` with priority ordering:
    |---|---|---|
    | Gold | `mayor` | `orchestrator` |
    | Blue | `scout`, `Plan`, `Explore` | `work-planner` |
-   | White | `inspector` | `code-reviewer` |
-   | Gray | `outrider` | `test-runner` |
-   | Orange | `mechanic` | `debugger` |
-   | Copper | `courier` | `git-agent` |
-   | Howler | `rider` | `general-purpose` |
-   | Helldiver | `helldiver` | `product-research` |
+   | Whites | `inspector` | `code-reviewer` |
+   | Grays | `outrider` | `test-runner` |
+   | Oranges | `mechanic` | `debugger` |
+   | Coppers | `courier` | `git-agent` |
+   | Howlers | `rider` | `general-purpose` |
+   | Helldivers | `helldivers` | `product-research` |
    | Primus | `primus` | `product-strategy-partner` |
-   | Green | `green` | `jira-ticket-writer` |
-   | Obsidian | `sentinel` | — |
-   | Brown | `archivist` | — |
+   | Greens | `greens` | `jira-ticket-writer` |
+   | Obsidians | `sentinel` | — |
+   | Browns | `archivist` | — |
 
 2. **Word-boundary keyword match** -- `\brider\b` (not substring, avoids false positives like "provider")
 

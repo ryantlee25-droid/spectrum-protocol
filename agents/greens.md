@@ -1,8 +1,8 @@
 ---
-name: green
+name: greens
 description: "Use this agent when a user provides a PRD, product spec, technical specification, or any structured product document and needs it decomposed into well-scoped, individually shippable Jira tickets with clear acceptance criteria. This agent should be invoked when a product manager, engineer, or team lead needs to translate high-level product requirements into actionable engineering work items.\n\n<example>\nContext: A product manager has just finished writing a PRD for a new authentication feature and needs it broken into engineering tickets.\nuser: \"Here's our PRD for the new SSO login flow. Can you break this into Jira tickets?\"\nassistant: \"I'll use the Jira ticket writer agent to decompose this PRD into clearly scoped, shippable tickets.\"\n<commentary>\nThe user has provided a PRD and explicitly wants Jira tickets. Launch the jira-ticket-writer agent to process the document.\n</commentary>\n</example>\n\n<example>\nContext: An engineering lead has a technical spec for an API redesign and wants to plan the sprint.\nuser: \"We have this spec for the payments API v2 refactor. We need tickets for sprint planning tomorrow.\"\nassistant: \"Let me invoke the Jira ticket writer agent to break down this spec into sprint-ready tickets with proper acceptance criteria.\"\n<commentary>\nThe user needs structured Jira tickets from a technical spec before sprint planning. Use the jira-ticket-writer agent.\n</commentary>\n</example>\n\n<example>\nContext: A team has a feature document with some ambiguous sections and needs help structuring work.\nuser: \"Here's the spec for the notification center feature — it's a bit rough in places but we need to start ticketing it up.\"\nassistant: \"I'll launch the Jira ticket writer agent to process this document. It will flag any ambiguous scope as callouts rather than silently making product decisions.\"\n<commentary>\nEven with an imperfect spec, the jira-ticket-writer agent should be used — it's designed to surface scope questions rather than invent requirements.\n</commentary>\n</example>"
 model: sonnet
-color: blue
+color: green
 memory: project
 ---
 

@@ -1,7 +1,7 @@
 ---
-name: blue
+name: blues
 description: "Use this agent when a conversation involves planning, designing, or scoping code or project work before implementation begins. Triggered contextually when the user is discussing what to build, how to structure a feature, or breaking down a project into tasks for developers. This agent produces a structured PLAN.md that workers reference during execution.\n\n<example>\nContext: User is about to start building a new feature and wants to think through the approach.\nuser: \"I want to add user authentication to the app — JWT tokens, login/logout, protected routes.\"\nassistant: \"I'll use the work planner to create an implementation outline before we start coding.\"\n<commentary>\nUser is describing new work, not yet writing code. Invoke work-planner to create the outline first.\n</commentary>\n</example>\n\n<example>\nContext: User describes a project and wants to know where to start.\nuser: \"We need to refactor the API layer to support pagination and filtering. Not sure where to start.\"\nassistant: \"Let me have the work planner break this into a structured plan.\"\n<commentary>\nUser needs a plan before execution. Trigger work-planner to decompose and sequence the work.\n</commentary>\n</example>\n\n<example>\nContext: User is mid-discussion and the scope is growing.\nuser: \"Actually this is more complex than I thought — there's the backend changes, the frontend state, and we need to update the docs too.\"\nassistant: \"This has grown in scope — I'll invoke the work planner to capture all the pieces and sequence them.\"\n<commentary>\nScope has expanded; a plan is needed to keep work organized. Invoke work-planner.\n</commentary>\n</example>"
-model: haiku
+model: sonnet
 color: blue
 ---
 
