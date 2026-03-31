@@ -59,6 +59,14 @@ Every phase writes to `CHECKPOINT.json`, enabling resume-from-any-point if a ses
 
 ## Quick Start
 
+### One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ryantlee25-droid/spectrum-protocol/main/install.sh | bash
+```
+
+### Or manually
+
 ```bash
 # 1. Copy the protocol files
 cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
@@ -66,10 +74,10 @@ cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
 cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
 
 # 2. Copy agent definitions
-cp agents/*.md ~/.claude/agents/
+mkdir -p ~/.claude/agents && cp agents/*.md ~/.claude/agents/
 
 # 3. Copy tooling
-cp tools/seam_check.py ~/.claude/hooks/seam_check.py
+mkdir -p ~/.claude/hooks && cp tools/seam_check.py ~/.claude/hooks/
 
 # Done. No dependencies. No build step.
 ```
@@ -77,6 +85,8 @@ cp tools/seam_check.py ~/.claude/hooks/seam_check.py
 Then tell Claude Code: "Plan and build the auth system, dashboard, and API layer in parallel."
 
 Gold will activate, run muster, and present a manifest for your approval before any Howlers are dropped.
+
+**New to Spectrum?** Read the [Tutorial](TUTORIAL.md) for a full walkthrough. Keep the [Cheat Sheet](CHEATSHEET.md) handy.
 
 ---
 
@@ -156,6 +166,9 @@ spectrum-protocol/
 ├── README.md                  # You are here
 ├── LICENSE                    # MIT
 ├── INSTALL.md                 # Quick installation guide
+├── TUTORIAL.md                # Step-by-step first run walkthrough
+├── CHEATSHEET.md              # One-page quick reference
+├── install.sh                 # One-line installer script
 ├── ACKNOWLEDGMENTS.md         # Credits and inspiration
 ├── spectrum/
 │   ├── CLAUDE.md              # Main routing config (copy to ~/.claude/)
