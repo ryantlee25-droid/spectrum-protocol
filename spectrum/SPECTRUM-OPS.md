@@ -178,6 +178,50 @@ Gold notes `"mode": "reaping"` in CHECKPOINT.json. Lessons are still recorded.
 
 ---
 
+## Status Roster (Mandatory — All Phases)
+
+Gold MUST print a status roster inline in the conversation at every phase transition and after each agent dispatch or completion. This is the user's primary visibility into which agents are running.
+
+**Format:**
+
+```
+━━━ Spectrum: {rain-id} — {phase name} ━━━
+
+  ♛ Golds       Orchestrator   ● active
+  ◎ Blues        Planner        ✓ done
+  » howler-auth Worker         ● running    (auth middleware)
+  » howler-api  Worker         ● running    (API routes)
+  » howler-ui   Worker         ○ pending    (waiting: howler-auth#types)
+  ✦ Whites      Reviewer       ○ queued
+  ⛨ Grays       Tester         ○ queued
+  ▶ Coppers     Delivery       ○ queued
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Status symbols:**
+- `●` — currently running
+- `✓` — completed successfully
+- `✗` — failed
+- `■` — blocked
+- `○` — pending / queued / not yet dispatched
+
+**When to print:**
+1. After muster approval (shows full roster with all agents pending)
+2. After each Howler dispatch (update dispatched agent to `●`)
+3. After each agent completion or failure (update to `✓` or `✗`)
+4. At phase transitions (Muster → Drop → Proving → Forge → Pax → Triumph)
+5. When the user asks for status
+
+**Rules:**
+- Include ALL agents that will participate, not just Howlers — Blues, Whites, Grays, Coppers, Obsidians, Browns all appear
+- Show the agent's task in parentheses for Howlers
+- Show dependency waits for pending Howlers
+- For the triple quality gate (White + Gray + /diff-review per Howler), show each gate agent
+- Keep the roster compact — one line per agent, no verbose descriptions
+
+---
+
 ## Phase 2: The Drop
 
 ### Discovery Relay

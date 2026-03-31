@@ -117,6 +117,10 @@ For small spectrum runs where full muster ceremony (~8 min) exceeds the actual w
 
 **Escalation:** If any Howler sets `Status: blocked` during reaping mode, Gold may upgrade to full spectrum mode (write full MANIFEST.md + CONTRACT.md) if the blocker suggests the tasks were not as independent as assumed.
 
+### Status Roster (Mandatory — All Phases)
+
+Gold MUST print a status roster inline after every dispatch, completion, and phase transition. This is the user's primary visibility into the spectrum. Format: one line per agent with glyph, name, role, status symbol (`●` running, `✓` done, `✗` failed, `■` blocked, `○` pending), and task context. Include ALL agents (Blues, Whites, Grays, Coppers, Obsidians, Browns) — not just Howlers. See SPECTRUM-OPS.md for full format.
+
 ### Phase 2 — The Drop
 
 **Structural enforcement**: During muster and drop, Gold MUST NOT use Write/Edit on project source files. Gold plans; it does not code. Only spectrum artifacts (MANIFEST.md, CONTRACT.md, etc.) are written by Gold.

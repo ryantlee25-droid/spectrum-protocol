@@ -468,6 +468,44 @@ git worktree list  # All spectrum worktrees should appear
 
 ---
 
+## Status Roster (Mandatory — All Phases)
+
+Gold MUST print a status roster inline in the conversation at every phase transition and after each agent dispatch or completion. This is the user's primary visibility into the spectrum.
+
+**Format:**
+
+```
+━━━ Spectrum: {rain-id} — {phase name} ━━━
+
+  ♛ Golds       Orchestrator   ● active
+  ◎ Blues        Planner        ✓ done
+  » howler-auth Worker         ● running    (auth middleware)
+  » howler-api  Worker         ● running    (API routes)
+  » howler-ui   Worker         ○ pending    (waiting: howler-auth#types)
+  ✦ Whites      Reviewer       ○ queued
+  ⛨ Grays       Tester         ○ queued
+  ▶ Coppers     Delivery       ○ queued
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Status symbols:** `●` running, `✓` complete, `✗` failed, `■` blocked, `○` pending/queued.
+
+**When to print:**
+1. After muster approval (full roster, all pending)
+2. After each Howler dispatch (update to `●`)
+3. After each agent completion or failure (update to `✓` or `✗`)
+4. At every phase transition
+5. On user request
+
+**Rules:**
+- Include ALL agents — Blues, Whites, Grays, Coppers, Obsidians, Browns — not just Howlers
+- Show task in parentheses for Howlers, dependency waits for pending ones
+- Show each quality gate agent (White + Gray + /diff-review) per Howler during The Proving
+- One line per agent, compact
+
+---
+
 ## Phase 2: The Drop
 
 ### 2.0 Structural Enforcement
