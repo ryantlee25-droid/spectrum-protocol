@@ -12,24 +12,24 @@ Inspired by [steveyegge/gastown](https://github.com/steveyegge/gastown). Adapted
 
 | Name | `subagent_type` | Role | Model | Color |
 |------|----------------|------|-------|-------|
-| **Golds** ♛ | `golds` | Orchestrator -- muster, contracts, seam analysis, merge planning | Opus | Gold |
-| **Blues** ◎ | `blues` | Planner -- scopes work, produces PLAN.md before spectrum activates | Sonnet | Blue |
-| **Howlers** » | `howlers` | Workers -- implement tasks in isolated worktrees | Sonnet (floor) | Orange |
-| **Whites** ✦ | `whites` | Code reviewer -- pre-PR diff review, contract compliance | Sonnet | White |
-| **Grays** ⛨ | `grays` | Test runner -- runs tests, diagnoses failures, writes missing coverage | Sonnet | Gray |
-| **Oranges** ✧ | `oranges` | Debugger -- root cause analysis when Howlers hit blockers | Sonnet | Orange |
-| **Coppers** ▶ | `coppers` | Delivery -- commits, branch naming, PR creation | Haiku | Copper |
-| **Obsidians** ⊘ | `obsidians` | Spec compliance -- post-merge verification against PLAN.md acceptance criteria | Sonnet | Obsidian |
-| **Browns** ⌂ | `browns` | Retrospective -- drafts LESSONS.md from HOOK.md, debriefs, White reports, timing | Haiku | Brown |
-| **Politicos** ⚡ | `politicos` | Adversarial -- challenges CONTRACT.md + MANIFEST.md before freeze (Phase 1.5) | Sonnet | Amber |
+| **Golds** ♛ | `golds` | Orchestrator -- muster, contracts, seam analysis, merge planning | Opus | `yellow` |
+| **Blues** ◎ | `blues` | Planner -- scopes work, produces PLAN.md before spectrum activates | Sonnet | `blue` |
+| **Howlers** » | `howlers` | Workers -- implement tasks in isolated worktrees | Sonnet (floor) | `orange` |
+| **Whites** ✦ | `whites` | Code reviewer -- pre-PR diff review, contract compliance | Sonnet | `purple` |
+| **Grays** ⛨ | `grays` | Test runner -- runs tests, diagnoses failures, writes missing coverage | Sonnet | `gray` |
+| **Oranges** ✧ | `oranges` | Debugger -- root cause analysis when Howlers hit blockers | Sonnet | `red` |
+| **Coppers** ▶ | `coppers` | Delivery -- commits, branch naming, PR creation | Haiku | `cyan` |
+| **Obsidians** ⊘ | `obsidians` | Spec compliance -- post-merge verification against PLAN.md acceptance criteria | Sonnet | `teal` |
+| **Browns** ⌂ | `browns` | Retrospective -- drafts LESSONS.md from HOOK.md, debriefs, White reports, timing | Haiku | `overlay` |
+| **Politicos** ⚡ | `politicos` | Adversarial -- challenges CONTRACT.md + MANIFEST.md before freeze (Phase 1.5) | Sonnet | `red` |
 
 Auxiliary agents (not part of spectrum -- see `~/.claude/AGENTS.md`):
 
 | Name | `subagent_type` | Role | Model | Color |
 |------|----------------|------|-------|-------|
-| **Helldivers** ◈ | `helldivers` | Problem research, validation, opportunity sizing | Sonnet | Red |
-| **Primus** ⊕ | `primus` | PRDs, prioritization, roadmaps, strategy | Sonnet | Gold |
-| **Greens** ≡ | `greens` | Decompose specs into scoped Jira tickets | Sonnet | Green |
+| **Helldivers** ◈ | `helldivers` | Problem research, validation, opportunity sizing | Sonnet | `yellow` |
+| **Primus** ⊕ | `primus` | PRDs, prioritization, roadmaps, strategy | Sonnet | `green` |
+| **Greens** ≡ | `greens` | Decompose specs into scoped Jira tickets | Sonnet | `green` |
 
 Agent definitions live in `~/.claude/agents/{role-name}.md`. Claude Code's built-in agent names (`code-reviewer`, `test-runner`, etc.) are preserved as aliases in the role detection system for backward compatibility.
 

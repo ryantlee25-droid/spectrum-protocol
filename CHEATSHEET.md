@@ -19,21 +19,34 @@ Pax           Gold validates, cross-references, writes merge plan
 Triumph       Human merges, Obsidian verifies spec compliance
 ```
 
-## Agents
+## Agents & Colors
+
+Each agent displays with a background color highlight in Claude Code's terminal UI.
+Shared colors are between agents that never run concurrently.
 
 ```
-Golds     ♛  Commands the spectrum          (Opus)
-Blues      ◎  Plans work → PLAN.md           (Sonnet)
-Howlers   »  Builds in parallel worktrees   (Sonnet)
-Whites    ✦  Reviews code before PR         (Sonnet)
-Grays     ⛨  Runs tests + coverage          (Sonnet)
-Oranges   ✧  Debugs root causes             (Sonnet)
-Coppers   ▶  Commits, branches, PRs         (Haiku)
-Obsidians ⊘  Verifies spec after merge      (Sonnet)
-Browns    ⌂  Records lessons learned        (Haiku)
-Violets   ~  Designs API/schema specs       (Sonnet)
-Politicos ⚡  Challenges plans before freeze (Sonnet)
+Agent      Glyph  Color     Model    Role
+─────────  ─────  ────────  ───────  ─────────────────────────────────
+Golds      ♛      yellow    Opus     Commands the spectrum
+Blues       ◎      blue      Sonnet   Plans work → PLAN.md
+Howlers    »      orange    Sonnet   Builds in parallel worktrees
+Whites     ✦      purple    Sonnet   Reviews code before PR
+Grays      ⛨      gray      Sonnet   Runs tests + coverage
+Oranges    ✧      red       Sonnet   Debugs root causes
+Coppers    ▶      cyan      Haiku    Commits, branches, PRs
+Obsidians  ⊘      teal      Sonnet   Verifies spec after merge
+Browns     ⌂      overlay   Haiku    Records lessons learned
+Violets    ~      pink      Sonnet   Designs API/schema specs
+Politicos  ⚡      red       Sonnet   Challenges plans before freeze
+─────────  ─────  ────────  ───────  ─────────────────────────────────
+Helldivers ◈      yellow    Sonnet   Problem research (auxiliary)
+Primus     ⊕      green     Sonnet   Product strategy (auxiliary)
+Greens     ≡      green     Sonnet   Breaks specs into tickets (auxiliary)
 ```
+
+Shared colors: Oranges/Politicos (red) — Phase 4 vs 1.5.
+Golds/Helldivers (yellow) — pipeline vs auxiliary.
+Greens/Primus (green) — both auxiliary.
 
 ## Key Artifacts
 
