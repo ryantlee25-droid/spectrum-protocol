@@ -8,7 +8,7 @@
 
 | Role | `subagent_type` | Model | Glyph | Color | Purpose |
 |------|----------------|-------|-------|-------|---------|
-| Golds | `golds` | opus | ♛ | `yellow` | Muster, contracts, seam analysis, merge planning |
+| Golds | `golds` | sonnet | ♛ | `yellow` | Muster, contracts, seam analysis, merge planning |
 | Blues | `blues` | sonnet | ◎ | `blue` | Plan work → PLAN.md (before Spectrum) |
 | Howlers | `howlers` | sonnet+ | » | `orange` | Implement tasks in isolated worktrees |
 | Whites | `whites` | sonnet | ✦ | `purple` | Pre-PR diff review, contract compliance |

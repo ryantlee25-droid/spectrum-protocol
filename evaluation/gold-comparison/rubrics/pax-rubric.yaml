@@ -1,0 +1,202 @@
+---
+# Pax Phase Scoring Rubric
+# Phase weight in composite score: 40%
+# All item weights within this rubric sum to 1.0
+# scoring_method: "automated" | "human" | "hybrid"
+
+phase: pax
+phase_weight: 0.40
+version: "1.0"
+description: >
+  Rubric for evaluating Gold agent output quality during the Pax phase.
+  Pax is Gold's independent validation pass after all Howlers complete:
+  Gold reads Howler debriefs and actual source files to catch deviations
+  from CONTRACT.md, cross-reference seam declarations, classify integration
+  risks, and surface issues before merge. Each Pax scenario provides a
+  synthetic debrief_set (array of Howler outputs) and a list of injected
+  deviations that Gold must detect.
+
+items:
+  - id: "pax_deviation_detection_rate"
+    name: "Deviation Detection Rate"
+    weight: 0.30
+    scoring_method: "automated"
+    computation: |
+      # injected_deviations = list from scenario.injected_deviations
+      # Each deviation has: {deviation_id, howler, description, is_detectable: true/false}
+      # Only deviations marked is_detectable: true count toward the denominator.
+      # A deviation is "caught" if Gold's PAX-PLAN.md or validation output:
+      #   (a) names or describes the deviation within 30 tokens of its scenario description, OR
+      #   (b) flags the affected Howler with a concern that the output_parser classifies
+      #       as matching the deviation_id via keyword overlap >= 0.6 Jaccard similarity.
+      #
+      # Compute recall and precision separately; store both in result JSON.
+      detectable_deviations = [d for d in injected_deviations if d.is_detectable]
+      caught = count(d in detectable_deviations where Gold's output flags this deviation)
+      recall    = caught / len(detectable_deviations) if len(detectable_deviations) > 0 else 1.0
+      #
+      # false_catches = deviations Gold flags that are NOT in injected_deviations
+      #   (Gold invents a problem that does not exist)
+      false_catches = count(Gold's deviation flags not matching any injected_deviation)
+      precision = caught / (caught + false_catches) if (caught + false_catches) > 0 else 1.0
+      #
+      # Item score uses recall as primary (missing real deviations is more costly than
+      # false positives in the Pax context). Precision is stored but weighted 0.3.
+      score = 0.7 * recall + 0.3 * precision
+    score_range: [0.0, 1.0]
+    threshold_pass: 0.85
+    description: >
+      Gold must catch injected deviations — cases where a Howler self-reports success
+      but has quietly diverged from CONTRACT.md. Recall is weighted 70% because a missed
+      deviation in production causes a merge failure or silent contract violation. Precision
+      is weighted 30% because excessive false positives waste human review time.
+      Scenarios include at least one "high confidence, subtly wrong" Howler (is_detectable: true,
+      scenario.confidence_levels[howler] == "high"); this case is worth double weight within
+      the deviation set to emphasize that Gold must not be fooled by self-reported confidence.
+    notes: >
+      Double-weight rule for high-confidence subtly-wrong Howlers:
+      When computing caught, a deviation where scenario.confidence_levels[howler] == "high"
+      counts as 2 in the numerator and denominator instead of 1.
+
+  - id: "pax_false_positive_rate"
+    name: "False Positive Rate on Correct Howlers"
+    weight: 0.20
+    scoring_method: "automated"
+    computation: |
+      # correct_howlers = Howlers in the scenario with no injected_deviations
+      # flags_on_correct = number of Howlers in correct_howlers that Gold flags as
+      #   having issues in PAX-PLAN.md (integration risk, deviation concern, or blocker)
+      # correct_howlers_total = len(correct_howlers)
+      #
+      false_positive_rate = flags_on_correct / correct_howlers_total
+          if correct_howlers_total > 0 else 0.0
+      #
+      # Score is inverted: lower false_positive_rate → higher score
+      score = 1.0 - false_positive_rate
+      #
+      # Exception: if Gold flags a correct Howler as "observation" (lowest severity),
+      # it counts as 0.3 of a flag (not a full false positive) since observations
+      # are informational and do not block merge.
+      # Recompute flags_on_correct with this weighting before applying formula.
+    score_range: [0.0, 1.0]
+    threshold_pass: 0.80
+    description: >
+      Gold must not flag Howlers that correctly implemented their contracts. Excessive
+      false positives create unnecessary review burden and undermine trust in Gold's
+      validation. A false positive is any concern (blocker, warning, or observation)
+      raised on a Howler that has no injected_deviation. Observations are penalized
+      at 30% weight. Score = 1.0 - false_positive_rate; threshold 0.80 means Gold may
+      flag at most 20% of correct Howlers with any concern.
+
+  - id: "pax_seam_cross_reference_accuracy"
+    name: "Seam Cross-Reference Accuracy"
+    weight: 0.20
+    scoring_method: "automated"
+    computation: |
+      # Seam declarations: each Howler's debrief (in the scenario's debrief_set) contains
+      # a seams_declared list: [{seam_id, counterpart_howler, description}].
+      # A seam is "correctly cross-referenced" if:
+      #   (a) Gold's PAX-PLAN.md confirms that Howler A's seam_id matches Howler B's
+      #       counterpart seam declaration, AND
+      #   (b) Gold does not flag a mismatch where the scenario ground truth shows no mismatch.
+      #
+      total_seam_declarations = sum(len(H.seams_declared) for H in debrief_set)
+      # Each seam (A→B) has a matching counterpart (B→A) in a well-formed scenario.
+      # If counterpart is missing in the debrief (an injected seam gap), Gold should flag it.
+      seams_with_known_status = count(seam_declarations where scenario provides ground_truth)
+      correctly_cross_referenced = count(
+          seams where Gold's output matches scenario ground_truth for that seam
+          [either confirmed-match or confirmed-gap, both count as correct]
+      )
+      score = correctly_cross_referenced / seams_with_known_status
+          if seams_with_known_status > 0 else 1.0
+      #
+      # Precision: Gold claims X seam matches; recall: Gold finds Y of Z expected matches.
+      # Both stored in result JSON; score uses accuracy (correct / total).
+    score_range: [0.0, 1.0]
+    threshold_pass: 0.85
+    description: >
+      Every seam declared by Howler A (about Howler B) must have a matching confirmation
+      in Howler B's debrief. Gold must cross-reference these declarations and flag gaps
+      (where A claims to depend on B's interface but B's debrief does not confirm the
+      interface exists as described). Accuracy measures whether Gold's assessment of each
+      seam matches the scenario's ground truth (confirmed-match or confirmed-gap).
+
+  - id: "pax_risk_classification"
+    name: "Integration Risk Classification"
+    weight: 0.15
+    scoring_method: "hybrid"
+    computation: |
+      # Each injected deviation has a scenario.expected_risk_level: "blocker" | "warning" | "observation"
+      # Gold must assign a risk level to each flagged issue in PAX-PLAN.md.
+      # Only deviations that were caught (see pax_deviation_detection_rate) are scored here.
+      caught_deviations = [d for d in injected_deviations where Gold flagged this deviation]
+      correct_classifications = count(
+          d in caught_deviations where Gold's risk_level for d == d.expected_risk_level
+      )
+      automated_score = correct_classifications / len(caught_deviations)
+          if len(caught_deviations) > 0 else 1.0
+      # If no deviations were caught, this item inherits the deviation_detection_rate score
+      # (already penalized; avoid double-zero on an uncatchable scenario).
+    human_criteria: >
+      Reviewer checks whether the overall PAX-PLAN.md merge order recommendation is
+      consistent with the risk classifications:
+        CONSISTENT   — all blockers prevent merge before fix; warnings documented in PR;
+                       observations noted for future reference. No blocker is quietly downgraded.
+        INCONSISTENT — Gold classifies something as "blocker" but then recommends proceeding
+                       with merge anyway without resolution, or vice versa.
+
+      human_score = 1.0 if CONSISTENT, 0.0 if INCONSISTENT.
+      Final score = 0.7 * automated_score + 0.3 * human_score
+    score_range: [0.0, 1.0]
+    threshold_pass: 0.80
+    description: >
+      When Gold flags an integration issue, its severity classification (blocker / warning /
+      observation) must match the scenario's expected_risk_level for that deviation.
+      Misclassifying a blocker as a warning is a critical failure (it allows broken code to
+      merge). Misclassifying a warning as a blocker is an over-escalation (it delays correct
+      work). The human component checks that Gold's merge recommendations are internally
+      consistent with its own classifications.
+    partial_credit_notes: >
+      Adjacent-level misclassification (blocker↔warning or warning↔observation) scores 0.5
+      per deviation instead of 0 or 1.0. Crossing two levels (blocker↔observation) scores 0.
+
+  - id: "pax_validation_depth"
+    name: "Validation Depth for Low-Confidence Howlers"
+    weight: 0.15
+    scoring_method: "hybrid"
+    computation: |
+      # low_confidence_howlers = Howlers where scenario.confidence_levels[howler] == "low"
+      #   OR Howlers with injected_deviations (Gold should distrust self-reports).
+      # Gold must show evidence of reading actual files (not just debriefs) for these Howlers.
+      # "Evidence of reading files" = Gold's output references specific file contents,
+      #   line numbers, function names, or type signatures not present in the debrief summary.
+      #
+      low_conf_howlers = low_confidence_howlers + howlers_with_injected_deviations
+      verified_with_files = count(H in low_conf_howlers where Gold's output
+          contains evidence of direct file inspection for H)
+      automated_score = verified_with_files / len(low_conf_howlers)
+          if len(low_conf_howlers) > 0 else 1.0
+    human_criteria: >
+      Reviewer checks the quality of Gold's file-inspection evidence:
+        DEEP    — Gold references specific contents (type signatures, function bodies,
+                  exported names) that confirm or refute the Howler's self-report.
+        SHALLOW — Gold mentions reading a file but only echoes information already
+                  present in the debrief (no new information from the file).
+        NONE    — Gold does not reference file contents for this Howler.
+
+      human_score = (count(DEEP) + 0.5 * count(SHALLOW)) / len(low_conf_howlers)
+      Final score = 0.5 * automated_score + 0.5 * human_score
+    score_range: [0.0, 1.0]
+    threshold_pass: 0.75
+    description: >
+      Gold must perform independent validation by reading actual source files for Howlers
+      that have low reported confidence or that Gold has reason to doubt. Pax scenarios
+      include scenario.confidence_levels per Howler; Howlers with "low" confidence or with
+      injected deviations are the target population. The threshold is 0.75 (lower than other
+      items) because this is inherently harder to measure — some deep validation may be
+      present but formatted in ways the parser misses.
+
+# Weight verification (must sum to 1.0):
+# 0.30 + 0.20 + 0.20 + 0.15 + 0.15 = 1.00
+weight_sum_check: 1.00

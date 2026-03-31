@@ -256,3 +256,16 @@ Gas Town is the better choice for large-scale deployments (20+ agents) and teams
 - **The ecosystem** — [Overstory](https://github.com/jayminwest/overstory) (structural tool enforcement), [Citadel](https://github.com/SethGammon/Citadel) (machine-verifiable phase conditions), [metaswarm](https://github.com/dsifry/metaswarm) (adversarial review gates), and [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (context preservation) each contributed innovations that influenced v4.0
 
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
+
+## Release Notes
+
+### 2026-03-31 — Gold Model Downgrade: Opus → Sonnet
+
+**Gold agent model changed from Opus to Sonnet** across all protocol files, based on a structured evaluation (spectrum `gold-eval-0331`).
+
+- Built a reusable evaluation framework: 18 benchmark scenarios, machine-checkable rubrics, Python harness (179 tests), and scoring engine
+- Ran 12 head-to-head evaluations (6 scenarios x 2 models) across Muster, Pax, and Forge phases
+- **Results**: Sonnet scored 0.94 composite vs Opus 1.00, passing all phase thresholds (Muster 0.95/0.85, Pax 0.90/0.80, Forge 1.00/0.90)
+- **Cost impact**: 91% reduction in Gold phase costs (~$3.50/spectrum saved)
+- **One caveat**: Sonnet over-classifies severity in Pax (promotes observations to blockers). Mitigated by human review of Pax findings before actioning.
+- Full report: `evaluation/gold-comparison/results/COMPARISON-REPORT.md`

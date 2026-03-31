@@ -1,0 +1,234 @@
+scenario_id: "muster-04"
+gold_phase: "muster"
+difficulty: "hard"
+description: "8-Howler full muster: e-commerce platform migration with cross-cutting types, multiple shared interfaces, and a non-obvious DAG that has two serial phases"
+
+task_description: |
+  Migrate an e-commerce monolith to a feature-sliced architecture. The monolith
+  has intermingled product, cart, checkout, payment, inventory, user, notification,
+  and analytics concerns. Each domain becomes a self-contained feature slice with
+  its own types, API layer, and UI components. Shared cross-cutting types (Money,
+  ProductId, OrderId, UserId) must be extracted first.
+
+  Additionally: the payment slice has a hard dependency on the checkout slice completing
+  first (payment processes checkout state), and the analytics slice must come last
+  (it instruments all other slices' event emissions).
+
+plan_excerpt: |
+  ## Task: E-Commerce Monolith Feature-Sliced Migration
+
+  ### Phase 1 — Foundation (serial)
+  - `src/shared/types.ts` — Money, ProductId, OrderId, UserId, CartId value objects
+  - `src/shared/events.ts` — EventBus interface and DomainEvent base type
+
+  ### Phase 2 — Core Slices (parallel after Phase 1)
+  - `src/features/product/` — ProductRepository, ProductCard, ProductGrid
+  - `src/features/cart/` — CartStore, CartItem, CartSummary component
+  - `src/features/checkout/` — CheckoutFlow, OrderSummary, CheckoutState
+  - `src/features/user/` — UserProfile, AuthGuard, UserStore
+  - `src/features/inventory/` — InventoryService, StockBadge
+
+  ### Phase 3 — Dependent Slices (serial dependencies)
+  - `src/features/payment/` — PaymentForm, PaymentProcessor (depends on CheckoutState)
+  - `src/features/notification/` — NotificationCenter, EmailTemplates
+
+  ### Phase 4 — Instrumentation (serial, must be last)
+  - `src/features/analytics/` — EventTracking wrappers for all slices
+
+  ### Cross-cutting constraint
+  Money type is used by product, cart, checkout, payment, and inventory slices.
+  DomainEvent is used by all 7 non-analytics slices (analytics consumes them).
+
+codebase_context:
+  - path: "src/monolith/store.ts"
+    content: |
+      // 2400-line monolith — not shown in full
+      interface Product { id: string; price: number; stock: number; }
+      interface CartItem { productId: string; qty: number; price: number; }
+      interface Order { id: string; items: CartItem[]; total: number; status: string; }
+      interface User { id: string; email: string; roles: string[]; }
+      // ... all domain logic intermingled ...
+  - path: "src/shared/index.ts"
+    content: |
+      // Currently empty — shared types to be created
+      export {};
+  - path: "tsconfig.json"
+    content: |
+      {
+        "compilerOptions": {
+          "strict": true,
+          "baseUrl": "src",
+          "paths": { "@shared/*": ["shared/*"], "@features/*": ["features/*"] }
+        }
+      }
+
+num_howlers: 8
+
+expected_file_ownership:
+  - file: "src/shared/types.ts"
+    howler: "howler-shared-types"
+    action: "CREATES"
+  - file: "src/shared/events.ts"
+    howler: "howler-shared-types"
+    action: "CREATES"
+  - file: "src/features/product/index.ts"
+    howler: "howler-product"
+    action: "CREATES"
+  - file: "src/features/product/ProductRepository.ts"
+    howler: "howler-product"
+    action: "CREATES"
+  - file: "src/features/product/components/ProductCard.tsx"
+    howler: "howler-product"
+    action: "CREATES"
+  - file: "src/features/product/components/ProductGrid.tsx"
+    howler: "howler-product"
+    action: "CREATES"
+  - file: "src/features/cart/index.ts"
+    howler: "howler-cart"
+    action: "CREATES"
+  - file: "src/features/cart/CartStore.ts"
+    howler: "howler-cart"
+    action: "CREATES"
+  - file: "src/features/cart/components/CartSummary.tsx"
+    howler: "howler-cart"
+    action: "CREATES"
+  - file: "src/features/checkout/index.ts"
+    howler: "howler-checkout"
+    action: "CREATES"
+  - file: "src/features/checkout/CheckoutFlow.ts"
+    howler: "howler-checkout"
+    action: "CREATES"
+  - file: "src/features/checkout/CheckoutState.ts"
+    howler: "howler-checkout"
+    action: "CREATES"
+  - file: "src/features/user/index.ts"
+    howler: "howler-user"
+    action: "CREATES"
+  - file: "src/features/inventory/index.ts"
+    howler: "howler-inventory"
+    action: "CREATES"
+  - file: "src/features/payment/index.ts"
+    howler: "howler-payment"
+    action: "CREATES"
+  - file: "src/features/payment/PaymentProcessor.ts"
+    howler: "howler-payment"
+    action: "CREATES"
+  - file: "src/features/notification/index.ts"
+    howler: "howler-notification"
+    action: "CREATES"
+  - file: "src/features/analytics/index.ts"
+    howler: "howler-analytics"
+    action: "CREATES"
+  - file: "src/features/analytics/EventTracking.ts"
+    howler: "howler-analytics"
+    action: "CREATES"
+
+known_conflicts:
+  - file: "src/shared/types.ts"
+    naive_howlers: ["howler-product", "howler-cart", "howler-checkout", "howler-payment", "howler-inventory"]
+    correct_resolution: >
+      Dedicated howler-shared-types owns src/shared/types.ts and src/shared/events.ts.
+      All feature slices import Money, ProductId, etc. from @shared/types.
+      Naive approach: each slice defines its own Money type with different precision handling,
+      causing silent arithmetic bugs at slice boundaries.
+  - file: "src/shared/events.ts"
+    naive_howlers: ["howler-product", "howler-cart", "howler-checkout", "howler-notification", "howler-analytics"]
+    correct_resolution: >
+      EventBus and DomainEvent must be in shared/events.ts owned by howler-shared-types.
+      Analytics Howler imports DomainEvent to define event consumers — it cannot define the
+      base type itself without circular ownership.
+
+expected_dag_edges:
+  - from: "howler-product"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-cart"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-checkout"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-user"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-inventory"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-notification"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-payment"
+    to: "howler-shared-types"
+    type: "types"
+  - from: "howler-payment"
+    to: "howler-checkout"
+    type: "implementation"
+    note: "PaymentProcessor reads CheckoutState to determine what to charge"
+  - from: "howler-analytics"
+    to: "howler-product"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-cart"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-checkout"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-payment"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-user"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-inventory"
+    type: "implementation"
+  - from: "howler-analytics"
+    to: "howler-notification"
+    type: "implementation"
+
+expected_contract_sections:
+  - section: "shared_types"
+    must_include:
+      - "Money"
+      - "ProductId"
+      - "OrderId"
+      - "UserId"
+      - "CartId"
+      - "DomainEvent"
+      - "EventBus"
+  - section: "postconditions"
+    howler: "howler-shared-types"
+    must_include:
+      - "exports Money as branded type { amount: number; currency: string }"
+      - "exports DomainEvent<T> with payload: T"
+      - "signals #types-stable"
+  - section: "postconditions"
+    howler: "howler-checkout"
+    must_include:
+      - "exports CheckoutState interface"
+      - "CheckoutState includes items, total: Money, status enum"
+      - "signals #implementation-stable for payment dependency"
+  - section: "serial_dependencies"
+    must_include:
+      - "howler-payment depends on howler-checkout#implementation-stable"
+      - "howler-analytics depends on all 7 feature slices completing"
+  - section: "invariants"
+    must_include:
+      - "Money arithmetic must preserve currency; no plain number arithmetic across slices"
+      - "All DomainEvent emissions must use EventBus.emit(), not direct imports"
+
+scoring_notes: |
+  Hard scenario. Three layers of complexity:
+
+  1. Cross-cutting types conflict (Money, DomainEvent) — visible to any careful reader
+  2. Non-obvious serial dependency: payment depends on checkout's CheckoutState *interface*,
+     not just the types foundation. This requires a #implementation-stable checkpoint,
+     not just #types-stable.
+  3. Analytics as a synthesizer: it imports event types from ALL 7 slices, so it must
+     run last. A naive decomposition drops analytics in parallel and it fails to compile
+     because slice event types don't exist yet.
+
+  A Sonnet-level Gold might catch #1 but miss #2 (payment→checkout dep) and #3 (analytics
+  as terminal synthesizer). An Opus-level Gold should catch all three.
+
+  Effort: L. Expected Howler effort breakdown — shared-types: S, product/cart/user/inventory/notification: M, checkout: M, payment: M (serial dep), analytics: L (synthesizer).

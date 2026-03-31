@@ -1,0 +1,112 @@
+scenario_id: "forge-03"
+gold_phase: "forge"
+difficulty: "hard"
+description: "Structural failure: Howler discovers that two tasks in the manifest require modifying the same file — file ownership conflict that muster missed"
+
+hook_md_excerpt: |
+  ## Status: blocked
+  ## Task
+  howler-notifications: implement email and push notification dispatch
+
+  ## Errors Encountered
+  - CONFLICT: Cannot proceed with task as scoped.
+    src/config/services.ts is listed in my CREATES in MANIFEST.md, but this file
+    already exists with content written by howler-integrations (which completed yesterday).
+    howler-integrations registered external service configs in this same file.
+    My task requires adding notification service configs (SendGrid, Firebase) to the
+    same file.
+
+  ## Work Completed
+  - [x] Created src/notifications/EmailDispatcher.ts
+  - [x] Created src/notifications/PushDispatcher.ts
+  - [ ] src/config/services.ts — BLOCKED (file already exists, owned by howler-integrations)
+
+  ## Blockers
+  Status: blocked
+  Reason: File ownership conflict on src/config/services.ts. This file was in both
+  MANIFEST.md howler-integrations and my CREATES list. MANIFEST.md shows it once
+  (under howler-integrations) but my original task description from the drop prompt
+  said to add my configs to services.ts.
+
+  ## What I Need
+  Gold must resolve the file ownership conflict before I can proceed.
+
+error_context: |
+  MANIFEST.md extract:
+    howler-integrations:
+      CREATES: [src/config/services.ts, src/integrations/StripeClient.ts, src/integrations/S3Client.ts]
+
+  howler-notifications drop prompt (verbatim instruction from Gold):
+    "Add SendGrid and Firebase configuration to src/config/services.ts"
+
+  howler-integrations debrief (completed):
+    "Created src/config/services.ts with Stripe and S3 configuration objects.
+     File is complete. No notification configs added (outside my scope)."
+
+  Current src/config/services.ts content (as written by howler-integrations):
+    export const stripeConfig = { apiKey: process.env.STRIPE_API_KEY };
+    export const s3Config = { bucket: process.env.S3_BUCKET, region: process.env.AWS_REGION };
+
+  Error: Gold's drop prompt for howler-notifications contradicted MANIFEST.md file
+  ownership — Gold told howler-notifications to write to a file owned by howler-integrations.
+
+failure_history:
+  - attempt: 1
+    classification: null
+    locus: "src/config/services.ts"
+    error: "file ownership conflict — file already exists, owned by another Howler"
+
+correct_classification: "structural"
+correct_recovery_action: "restructure"
+circuit_breaker_applies: false
+
+rationale: |
+  This is a structural failure — the decomposition itself is flawed:
+  1. The MANIFEST.md's file ownership rule was violated: Gold's drop prompt told
+     howler-notifications to modify a file owned by howler-integrations
+  2. This is not a code error or environment issue — it's a planning error in the
+     manifest/contract
+  3. The file ownership invariant ("every file appears in exactly one Howler's column")
+     was broken in Gold's verbal drop instruction even if MANIFEST.md looks correct
+  4. The only resolution requires re-planning: either (a) assign src/config/services.ts
+     to howler-notifications with howler-integrations importing from it, or (b) create
+     a separate src/config/notification-services.ts for notification configs
+
+  Correct action: Restructure. Gold must re-plan the file ownership before dropping
+  a recovery Howler. This cannot be resolved by simply resuming — the boundary is wrong.
+
+  Wrong answers:
+  - logical: incorrect — there's no code logic error, the task scope is broken
+  - transient: incorrect — running again will produce the same conflict
+  - conflict: plausible but wrong; "conflict" in the 5-type taxonomy refers to
+    merge conflicts from git operations, not ownership planning conflicts
+  - recovery: resume — incorrect because resuming won't resolve ownership ambiguity
+
+  The ambiguity with "conflict" failure type: the Spectrum protocol defines "conflict"
+  as git merge conflicts from concurrent edits to the same branch. This is a planning
+  conflict (ownership), not a git conflict. Structural is the correct type.
+
+scoring_notes: |
+  Hard scenario. The structural vs conflict classification is the key test.
+
+  The word "conflict" appears in the error description which may prompt a model to
+  classify as "conflict" failure type. But the 5-type taxonomy distinguishes:
+  - conflict = git merge conflict from concurrent branch edits
+  - structural = planning failure, wrong decomposition, contract mismatch
+
+  This is a planning failure — Gold gave contradictory instructions (MANIFEST says one
+  owner, drop prompt says another). The Howler correctly identified this and blocked.
+
+  A Sonnet Gold might:
+  1. Misclassify as "conflict" (seduced by the word in the error)
+  2. Misclassify as "logical" (treating it as a code problem the Howler can solve)
+  3. Recommend "resume" instead of "restructure"
+
+  An Opus Gold should:
+  1. Recognize "file already owned by another Howler" = structural decomposition fault
+  2. Recommend restructure to fix the ownership
+  3. Suggest the re-planning options (separate config file, or reassign ownership)
+
+  circuit_breaker_applies: false because this is the FIRST failure on this locus.
+  The circuit breaker would apply if Gold had already classified one failure here
+  and another occurs on the same locus.

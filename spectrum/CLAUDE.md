@@ -7,7 +7,7 @@ It applies across all projects unless overridden by a project-level `CLAUDE.md`.
 
 ## Agent Roster
 
-- **Gold** (Opus) — spectrum muster, task decomposition, contract authoring, seam analysis, merge planning
+- **Gold** (Sonnet) — spectrum muster, task decomposition, contract authoring, seam analysis, merge planning. **Note**: Pax findings should be human-reviewed for severity before actioning blockers (Sonnet tends to over-classify observations as blockers).
 - **Blue** (Sonnet) — scope features, bugs, refactors, migrations → produces `PLAN.md`
 - **White** (Sonnet) — pre-PR/MR diff review — blockers, warnings, suggestions
 - **Gray** (Sonnet) — run tests with coverage, diagnose failures, write missing tests
@@ -227,7 +227,7 @@ Coverage gaps and security high/medium findings are warnings, not blockers. Note
 
 | Agent | Model | Rationale |
 |---|---|---|
-| Golds (`mayor`) | **opus** | Hardest cognitive work: task decomposition, file ownership conflict detection, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Judgment-heavy synthesis. Sonnet cuts corners on integration. |
+| Golds (`mayor`) | **sonnet** | Task decomposition, file ownership conflict detection, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Evaluated against Opus (gold-eval-0331): Sonnet scored 0.94 composite vs Opus 1.00 at 91% cost reduction. One caveat: Pax severity over-flagging — human must review blocker classifications. |
 | Blues (`scout`) | **sonnet** | PLAN.md feeds directly into muster. A bad plan cascades through the entire spectrum. Sonnet is the minimum for scoping tasks and anticipating file conflicts. |
 | Howlers (`rider`) | **sonnet** (floor) | Implementation is Sonnet's sweet spot. Haiku passes tests but misses architectural intent from the contract. Howlers inherit session model but never below Sonnet. |
 | Whites (`inspector`) | **sonnet** | Reasoning depth for subtle bugs, security issues, and contract compliance. |

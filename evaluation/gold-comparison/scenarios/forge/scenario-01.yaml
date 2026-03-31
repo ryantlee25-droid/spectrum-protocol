@@ -1,0 +1,76 @@
+scenario_id: "forge-01"
+gold_phase: "forge"
+difficulty: "easy"
+description: "Transient failure: intermittent network timeout during npm install in CI — unambiguous transient"
+
+hook_md_excerpt: |
+  ## Status: failed
+  ## Task
+  Install dependencies and run build for howler-ui
+
+  ## Errors Encountered
+  - npm ERR! network timeout at: https://registry.npmjs.org/react/-/react-18.2.0.tgz
+  - npm ERR! A complete log of this run can be found in: /root/.npm/_logs/2026-03-31T04_22_11_078Z-debug-0.log
+  - Error occurred at step: npm install (attempt 1 of 1)
+
+  ## Work Completed
+  - [ ] Dependencies installed
+  - [ ] Build passed
+  - [ ] Tests passed
+
+  ## Work NOT Started
+  - All implementation tasks (blocked on install failure)
+
+  ## Alignment: on-track
+  No implementation work attempted yet — failed at environment setup.
+
+error_context: |
+  Exit code: 1
+  Command: npm install
+  Error type: ECONNRESET / network timeout
+  Registry: https://registry.npmjs.org
+  Time: 2026-03-31T04:22:11.078Z
+  Duration before timeout: 30s
+  No rate limiting indicated (no 429 response)
+  No authentication error
+  Other Howlers in same spectrum run: howler-auth completed successfully (npm install succeeded)
+  Current network status: registry.npmjs.org responding normally (checked externally)
+
+failure_history:
+  - attempt: 1
+    classification: null
+    locus: "npm install"
+    error: "network timeout"
+
+correct_classification: "transient"
+correct_recovery_action: "resume"
+circuit_breaker_applies: false
+
+rationale: |
+  Clear transient failure indicators:
+  1. Error is ECONNRESET/network timeout — a network blip, not a code error
+  2. No implementation work was attempted — the Howler failed before touching any files
+  3. Other Howlers ran npm install successfully in the same spectrum run
+  4. Registry is currently responding normally
+  5. First failure on this locus — circuit breaker requires 2 failures on same locus
+
+  Correct action: Gold may auto-Resume (protocol allows auto-recovery for transient
+  failures without human confirmation). Drop a new Howler with: "Read HOOK.md and
+  continue. npm install timed out on first attempt — retry directly."
+
+  Wrong answers:
+  - classification: logical (incorrect — no code logic involved)
+  - classification: environmental (close but wrong — environment is fine, this was a
+    momentary network blip, not an environment configuration issue)
+  - recovery: retry (retry drops a fresh Howler with the original task; resume is
+    correct here because no work was done and we're just retrying the install)
+  - circuit_breaker_applies: true (incorrect — only one prior failure)
+
+scoring_notes: |
+  Easy calibration scenario. The only ambiguity is transient vs environmental.
+  Environmental would apply if the registry was down persistently or npm was
+  misconfigured. Here, other Howlers succeeded with npm install and the registry
+  is up — this is a momentary blip.
+
+  Both resume and retry are defensible (no work was lost either way), but resume
+  is preferred per protocol since the task didn't start.

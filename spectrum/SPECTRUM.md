@@ -12,7 +12,7 @@ Inspired by [steveyegge/gastown](https://github.com/steveyegge/gastown). Adapted
 
 | Name | `subagent_type` | Role | Model | Color |
 |------|----------------|------|-------|-------|
-| **Golds** ♛ | `golds` | Orchestrator -- muster, contracts, seam analysis, merge planning | Opus | `yellow` |
+| **Golds** ♛ | `golds` | Orchestrator -- muster, contracts, seam analysis, merge planning | Sonnet | `yellow` |
 | **Blues** ◎ | `blues` | Planner -- scopes work, produces PLAN.md before spectrum activates | Sonnet | `blue` |
 | **Howlers** » | `howlers` | Workers -- implement tasks in isolated worktrees | Sonnet (floor) | `orange` |
 | **Whites** ✦ | `whites` | Code reviewer -- pre-PR diff review, contract compliance | Sonnet | `purple` |
@@ -2013,7 +2013,7 @@ During execution, Gold does NOT dynamically add or remove Howlers. The DAG is fi
 
 | Role | Model | Rationale |
 |------|-------|-----------|
-| **Gold** | Opus | Hardest cognitive work: task decomposition, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Judgment-heavy synthesis -- Sonnet cuts corners on integration. |
+| **Gold** | Sonnet | Task decomposition, contract authoring, cross-referencing N debriefs for seam/assumption mismatches. Evaluated against Opus (gold-eval-0331): 0.94 composite at 91% cost savings. Pax severity over-flagging is the one caveat -- human reviews blocker classifications before actioning. |
 | **Blue** | Sonnet | PLAN.md feeds muster. A bad plan cascades through the entire spectrum run. |
 | **Howlers** | Sonnet (floor) | Implementation is Sonnet's sweet spot. Haiku passes tests but misses architectural intent from the contract. Inherit session model, never below Sonnet. |
 | **White** | Sonnet | Reasoning depth for subtle bugs, security, and contract compliance. |

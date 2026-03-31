@@ -1,0 +1,274 @@
+---
+# Scoring Guide — Gold Agent Evaluation
+# Defines composite score formula, thresholds, partial credit rules,
+# acceptable tolerance, and recommendation logic.
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# 1. Composite Score Formula
+# ---------------------------------------------------------------------------
+composite_formula:
+  description: >
+    The composite score is a weighted average of the three phase scores.
+    Each phase score is itself a weighted average of its rubric item scores
+    (see per-phase rubric YAML for item weights).
+    Formula: composite = 0.40 * muster_score + 0.40 * pax_score + 0.20 * forge_score
+  weights:
+    muster: 0.40
+    pax: 0.40
+    forge: 0.20
+  weight_sum_check: 1.00
+  rationale: >
+    Muster and Pax are equally weighted at 40% each because:
+    - Muster errors (bad decomposition, missed ownership conflicts, vague contracts)
+      cascade: they create integration failures that no downstream agent can fully
+      repair. A wrong DAG delays the entire spectrum.
+    - Pax errors (missed deviations, false positives) directly determine whether
+      broken code reaches the merge queue. Pax is the last safety net before merge.
+    Forge is weighted 20% because:
+    - The failure type taxonomy is well-defined (5 types, clear rules), making
+      Forge the most teachable of the three tasks.
+    - Forge errors (wrong classification, missed circuit breaker) are recoverable
+      by the human operator in a way that Muster and Pax errors are not.
+    - Forge scenarios arise only when Howlers fail; in successful spectra, Forge
+      is never exercised. It should not dominate the composite score.
+
+# ---------------------------------------------------------------------------
+# 2. Minimum Passing Thresholds (per phase)
+# ---------------------------------------------------------------------------
+thresholds:
+  muster:
+    pass: 0.85
+    rationale: >
+      Muster quality below 85% indicates systematic decomposition failures
+      (file ownership gaps, contract vagueness, missed conflicts) that would
+      produce broken spectra in production. The 85% floor tolerates one
+      rubric item scoring near its threshold without failing the phase overall.
+  pax:
+    pass: 0.80
+    rationale: >
+      Pax is harder to score perfectly because deviation detection involves
+      reading prose and inferring intent. The 80% floor reflects this
+      inherent difficulty while ensuring Gold catches the majority of real
+      deviations. A Pax score below 80% means Gold is missing more than
+      1 in 5 detectable deviations — unacceptable as a quality gate.
+  forge:
+    pass: 0.90
+    rationale: >
+      Forge has a higher threshold because the task is more rule-bound:
+      given a HOOK.md, classify the failure and apply a known protocol.
+      Below 90% means Gold is misclassifying failure types or skipping the
+      circuit breaker rule with meaningful frequency. These are not judgment
+      calls — they are protocol compliance checks.
+  composite:
+    pass: 0.84
+    computation: >
+      Minimum composite given all phases at threshold:
+      0.40 * 0.85 + 0.40 * 0.80 + 0.20 * 0.90 = 0.34 + 0.32 + 0.18 = 0.84
+      A model that scores exactly at each phase threshold reaches 0.84 composite.
+      This is the minimum passing composite (no rounding up).
+
+# ---------------------------------------------------------------------------
+# 3. Partial Credit Rules
+# ---------------------------------------------------------------------------
+partial_credit:
+  default_policy: >
+    Unless a rubric item specifies otherwise, scoring is continuous in [0.0, 1.0].
+    There is no minimum unit of credit — sub-items that contribute to an item's
+    computation can produce any real-valued score.
+  binary_items: >
+    Items with threshold_pass == 1.0 (forge_circuit_breaker_application) produce
+    a per-scenario score that is either 1.0, 0.5, or 0.0 per the item's computation.
+    The aggregate is the mean of per-scenario scores.
+  human_items:
+    reviewer_scale: >
+      Human-only items (muster_contract_precision) use a per-statement or per-Howler
+      classification (TESTABLE / VAGUE / ABSENT, PASS / PARTIAL / FAIL, etc.).
+      The mapping from classification to numeric value is defined in each item's
+      human_criteria field. Reviewers must classify individually before comparing
+      notes to prevent anchoring bias.
+    disagreement_resolution: >
+      When two reviewers disagree on the classification of a specific statement
+      or Howler, apply the conservative classification (the one that scores lower).
+      Log the disagreement in result JSON under human_review.disagreements with:
+        statement_id, reviewer_a_classification, reviewer_b_classification,
+        resolved_classification, resolved_score
+    minimum_reviewers: 2
+    tie_rule: >
+      With exactly 2 reviewers, disagreement resolves to the lower score (conservative).
+      With 3+ reviewers, majority vote determines classification; ties go to lower score.
+  hybrid_items:
+    weight_documentation: >
+      Each hybrid item specifies the automated/human split in its computation and
+      human_criteria fields. The split is fixed per item and may not be adjusted
+      at evaluation time. The splits are:
+        muster_contract_completeness:    60% automated, 40% human
+        muster_decomposition_soundness:  50% automated, 50% human
+        muster_politico_integration:     60% automated, 40% human
+        pax_risk_classification:         70% automated, 30% human
+        pax_validation_depth:            50% automated, 50% human
+        forge_recovery_action_correctness: automated score minus human penalty (see item)
+        forge_escalation_appropriateness: 60% automated, 40% human
+
+# ---------------------------------------------------------------------------
+# 4. Acceptable Tolerance for Recommendation
+# ---------------------------------------------------------------------------
+acceptable_tolerance:
+  definition: >
+    "Acceptable tolerance" means the model under test (Sonnet) scores within
+    the tolerance band of the reference model (Opus) on the same scenario set.
+    This is a RELATIVE comparison, not just an absolute threshold check.
+    Both models must run on the same scenarios in the same evaluation run.
+  band:
+    per_phase: 0.05
+    composite: 0.03
+    description: >
+      A Sonnet score within 5 percentage points of Opus per phase is within
+      acceptable tolerance. A Sonnet composite score within 3 percentage points
+      of Opus is within acceptable tolerance. These bands are separate from the
+      absolute pass/fail thresholds: Sonnet must BOTH (a) exceed the absolute
+      threshold AND (b) be within the tolerance band of Opus.
+      Example: if Opus scores 0.92 on Muster, Sonnet must score >= 0.85 (absolute)
+      AND >= 0.87 (within 0.05 of Opus). Both conditions must hold.
+  rationale: >
+    The tolerance band prevents a scenario where Opus barely passes (0.86) and
+    Sonnet also barely passes (0.85) but Opus's score is actually meaningfully
+    higher. The relative comparison ensures Sonnet is not just "good enough" in
+    absolute terms but genuinely comparable to Opus on the same inputs.
+
+# ---------------------------------------------------------------------------
+# 5. Per-Phase Score Computation
+# ---------------------------------------------------------------------------
+phase_score_computation:
+  description: >
+    Phase score = weighted average of item scores, using item weights from the
+    phase rubric. Items with scoring_method == "human" that have not yet been
+    reviewed are marked pending_human_review and excluded from the phase score
+    until reviewed. A phase score computed without all human items is labeled
+    "partial" in the result JSON and may not be used for the final recommendation.
+  formula: |
+    phase_score = sum(item.weight * item.score for item in phase.items
+                      if item.status != "pending_human_review")
+                / sum(item.weight for item in phase.items
+                      if item.status != "pending_human_review")
+    # If all items are scored: phase_score = sum(item.weight * item.score) by definition
+    # (weights sum to 1.0, so denominator == 1.0 and the formula simplifies).
+    # The renormalization applies only when human items are pending.
+
+# ---------------------------------------------------------------------------
+# 6. Recommendation Logic
+# ---------------------------------------------------------------------------
+recommendation:
+  description: >
+    The comparison_report.py emits a ## Recommendation section with one of the
+    following conclusions, based on Sonnet's per-phase pass/fail and tolerance check.
+    Conditions are evaluated in order; the first matching condition determines the output.
+
+  outcomes:
+    - id: "full_sonnet_downgrade"
+      label: "Sonnet meets threshold — full downgrade recommended"
+      condition: >
+        Sonnet passes ALL THREE absolute thresholds (muster >= 0.85, pax >= 0.80,
+        forge >= 0.90) AND is within the tolerance band of Opus on all three phases
+        (each phase within 0.05) AND composite is within 0.03 of Opus composite.
+      action: >
+        Recommend replacing Opus with Sonnet as Gold across all phases.
+        Include cost savings estimate in the recommendation section.
+        Flag for re-evaluation after any major protocol change or model update.
+
+    - id: "partial_downgrade_muster_only"
+      label: "Sonnet meets threshold for Muster only — partial downgrade (Muster)"
+      condition: >
+        Sonnet passes muster >= 0.85 AND within tolerance on Muster,
+        AND fails at least one of: pax < 0.80, forge < 0.90, or outside tolerance on
+        Pax or Forge.
+      action: >
+        Recommend using Sonnet for Muster phase only; keep Opus for Pax and Forge.
+        Note: this is a partial downgrade that reduces cost by approximately
+        [muster_token_fraction * cost_difference] per spectrum run (to be computed
+        from actual token counts in the harness run).
+
+    - id: "partial_downgrade_forge_only"
+      label: "Sonnet meets threshold for Forge only — partial downgrade (Forge)"
+      condition: >
+        Sonnet passes forge >= 0.90 AND within tolerance on Forge,
+        AND fails at least one of: muster < 0.85, pax < 0.80, or outside tolerance
+        on Muster or Pax.
+      action: >
+        Recommend using Sonnet for Forge phase only; keep Opus for Muster and Pax.
+        Note: Forge activates only when Howlers fail; cost savings are scenario-dependent.
+
+    - id: "partial_downgrade_muster_forge"
+      label: "Sonnet meets Muster and Forge but not Pax — partial downgrade (Muster + Forge)"
+      condition: >
+        Sonnet passes muster >= 0.85 AND forge >= 0.90 AND within tolerance on both,
+        AND fails pax < 0.80 OR outside tolerance on Pax.
+      action: >
+        Recommend using Sonnet for Muster and Forge; keep Opus for Pax.
+        This is the predicted outcome based on PLAN.md Section 7 analysis.
+        Pax's "green but wrong" detection is the highest-risk Sonnet downgrade scenario.
+
+    - id: "keep_opus"
+      label: "Sonnet does not meet threshold — keep Opus for all phases"
+      condition: >
+        Sonnet fails absolute threshold on 2 or more phases, OR fails absolute
+        threshold on Pax alone (Pax is the highest-risk phase; single Pax failure
+        is sufficient to block full downgrade AND block Muster+Forge partial).
+        Note: a Pax failure blocks partial_downgrade_muster_forge above; this outcome
+        captures the case where Pax fails and neither Muster nor Forge passes either.
+      action: >
+        Keep Opus as Gold for all phases. Document the specific scenarios and
+        rubric items where Sonnet degraded most severely. Re-evaluate after 90 days
+        or after a significant model update.
+
+  score_display_format: >
+    The recommendation section must display the following table before the conclusion:
+
+    | Phase   | Opus Score | Sonnet Score | Delta  | Threshold | Sonnet Pass? |
+    |---------|-----------|--------------|--------|-----------|--------------|
+    | Muster  | X.XX       | X.XX         | ±X.XX  | 0.85      | Yes / No     |
+    | Pax     | X.XX       | X.XX         | ±X.XX  | 0.80      | Yes / No     |
+    | Forge   | X.XX       | X.XX         | ±X.XX  | 0.90      | Yes / No     |
+    | Composite | X.XX    | X.XX         | ±X.XX  | 0.84      | Yes / No     |
+
+    Delta = Sonnet - Opus (negative means Sonnet scored lower).
+    Then state the conclusion sentence: "Sonnet [meets / does not meet] threshold.
+    Recommendation: [outcome.label]."
+
+# ---------------------------------------------------------------------------
+# 7. Monitoring After Downgrade
+# ---------------------------------------------------------------------------
+post_downgrade_monitoring:
+  description: >
+    If any downgrade is recommended, the following signals indicate regression
+    and should trigger a re-evaluation:
+  signals:
+    - name: "file_ownership_conflict_in_production"
+      description: >
+        A spectrum run produces a merge conflict on a file that both Howlers modified.
+        This is a direct Muster failure that should have been caught.
+      severity: critical
+      action: "immediate re-evaluation; suspend Sonnet-Gold for Muster pending results"
+    - name: "pax_missed_deviation_in_production"
+      description: >
+        A post-merge Obsidian report (SENTINEL-REPORT.md) or Gray run finds a contract
+        violation that Gold's Pax should have flagged. Indicates Pax degradation.
+      severity: high
+      action: "re-evaluate Pax phase within 14 days"
+    - name: "circuit_breaker_not_applied"
+      description: >
+        Gold drops a third Howler on the same locus after two failures, without
+        human confirmation. Circuit breaker was not applied.
+      severity: critical
+      action: "immediate re-evaluation; suspend Sonnet-Gold for Forge pending results"
+    - name: "score_trend_decline"
+      description: >
+        Re-running the evaluation (e.g., after a model update) shows scores declined
+        by more than 0.05 on any phase compared to the downgrade decision baseline.
+      severity: medium
+      action: "review per-type breakdowns; re-run full evaluation if decline persists"
+  rerun_trigger: >
+    Re-run the full evaluation after: (a) any Anthropic model update that changes
+    the Sonnet or Opus model version in use, (b) any change to the Spectrum protocol
+    that adds or removes Gold responsibilities, (c) 180 days since last evaluation
+    regardless of other triggers.

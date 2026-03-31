@@ -1,0 +1,287 @@
+scenario_id: "pax-05"
+gold_phase: "pax"
+difficulty: "hard"
+description: "5-Howler Pax: assumption invalidation — a completed Howler's output contradicts a CONTRACT assumption; Gold must detect that the integration seam is broken even though both Howlers self-report success"
+
+contract_md: |
+  ## Assumption (validated during muster)
+  The existing database layer uses Prisma ORM with auto-generated IDs (cuid format).
+  All entity IDs are strings (cuid2). No UUID format is used in this codebase.
+
+  ## Shared Types
+
+  ### EntityId convention
+  All IDs are cuid2 strings (e.g., "clz4k9h0000001234abcd"). Never UUID format.
+  ```typescript
+  type EntityId = string; // cuid2 format
+  ```
+
+  ### PaginatedResult
+  ```typescript
+  interface PaginatedResult<T> {
+    items: T[];
+    nextCursor: string | null; // cuid2 or null at end
+    totalCount: number;
+  }
+  ```
+
+  ## Postconditions
+
+  ### howler-db-layer
+  - exports TypeScript types matching Prisma schema
+  - all ID fields are `string` type (cuid2)
+  - exports `createPaginatedQuery(cursor?: string): PrismaQueryArgs`
+  - INVARIANT: cursor-based pagination uses cuid2 strings as cursors
+
+  ### howler-user-service
+  - exports `getUser(id: EntityId): Promise<User | null>`
+  - exports `listUsers(cursor?: string): Promise<PaginatedResult<User>>`
+  - pagination cursor is opaque to callers — passes through from db-layer unchanged
+
+  ### howler-post-service
+  - exports `getPost(id: EntityId): Promise<Post | null>`
+  - exports `listPostsByAuthor(authorId: EntityId, cursor?: string): Promise<PaginatedResult<Post>>`
+
+  ### howler-api-layer
+  - GET /users returns PaginatedResult<User> with cursor
+  - GET /users/:id returns User | 404
+  - cursor is passed as query param ?cursor=
+
+  ### howler-graphql-layer
+  - User type has id: ID! (GraphQL)
+  - Query.users returns UserConnection (Relay-style pagination using cursors)
+  - cursors in GraphQL are base64-encoded — ENCODE the cuid2 before returning, DECODE before querying
+
+debrief_set:
+  - howler: "howler-db-layer"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/db/types.ts
+      - src/db/pagination.ts
+      ## Seams Declared
+      - All ID types are string (cuid2)
+      - createPaginatedQuery exported
+    debrief: |
+      DB layer types match Prisma schema. Cursor pagination implemented with cuid2.
+      NOTE: discovered that the Prisma schema actually uses UUID (@default(uuid()), NOT cuid2.
+      IDs are UUID v4 format (e.g., "550e8400-e29b-41d4-a716-446655440000").
+      Updated types accordingly. All IDs remain string type but are UUID format.
+      Cross-domain note: CONTRACT assumed cuid2 but actual DB uses UUID. No functional
+      difference since both are strings — pagination still works.
+    files_created:
+      - path: "src/db/types.ts"
+        content: |
+          // NOTE: Prisma schema uses uuid() not cuid2() — IDs are UUID v4 format
+          // but still typed as string; downstream code is unaffected
+          export type EntityId = string; // UUID v4 format (not cuid2 as contract assumed)
+          export interface UserRecord {
+            id: EntityId; // e.g. "550e8400-e29b-41d4-a716-446655440000"
+            email: string;
+            displayName: string;
+            createdAt: Date;
+          }
+          export interface PostRecord {
+            id: EntityId;
+            authorId: EntityId;
+            title: string;
+            body: string;
+          }
+      - path: "src/db/pagination.ts"
+        content: |
+          export interface PaginatedResult<T> {
+            items: T[];
+            nextCursor: string | null;
+            totalCount: number;
+          }
+          export function createPaginatedQuery(cursor?: string) {
+            return cursor
+              ? { cursor: { id: cursor }, skip: 1, take: 20 }
+              : { take: 20 };
+          }
+
+  - howler: "howler-user-service"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Seams Declared
+      - getUser, listUsers exported
+      - cursor passed through from DB unchanged
+    debrief: |
+      User service implemented. Cursor-based pagination working.
+    files_created:
+      - path: "src/services/UserService.ts"
+        content: |
+          import { PaginatedResult, createPaginatedQuery } from '../db/pagination';
+          import { UserRecord } from '../db/types';
+          export async function getUser(id: string): Promise<UserRecord | null> {
+            return prisma.user.findUnique({ where: { id } });
+          }
+          export async function listUsers(cursor?: string): Promise<PaginatedResult<UserRecord>> {
+            const args = createPaginatedQuery(cursor);
+            const users = await prisma.user.findMany(args);
+            return {
+              items: users,
+              nextCursor: users.length === 20 ? users[users.length - 1].id : null,
+              totalCount: await prisma.user.count(),
+            };
+          }
+
+  - howler: "howler-post-service"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Seams Declared
+      - getPost, listPostsByAuthor exported
+    debrief: |
+      Post service implemented with cursor pagination.
+    files_created:
+      - path: "src/services/PostService.ts"
+        content: |
+          import { PaginatedResult, createPaginatedQuery } from '../db/pagination';
+          import { PostRecord } from '../db/types';
+          export async function getPost(id: string): Promise<PostRecord | null> {
+            return prisma.post.findUnique({ where: { id } });
+          }
+          export async function listPostsByAuthor(authorId: string, cursor?: string): Promise<PaginatedResult<PostRecord>> {
+            const args = { ...createPaginatedQuery(cursor), where: { authorId } };
+            const posts = await prisma.post.findMany(args);
+            return {
+              items: posts,
+              nextCursor: posts.length === 20 ? posts[posts.length - 1].id : null,
+              totalCount: await prisma.post.count({ where: { authorId } }),
+            };
+          }
+
+  - howler: "howler-api-layer"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Seams Declared
+      - cursor passed as query param
+    debrief: |
+      REST API endpoints implemented. Pagination working.
+    files_created:
+      - path: "src/api/routes.ts"
+        content: |
+          import { Router } from 'express';
+          import { listUsers, getUser } from '../services/UserService';
+          const router = Router();
+          router.get('/users', async (req, res) => {
+            const cursor = req.query.cursor as string | undefined;
+            const result = await listUsers(cursor);
+            res.json(result);
+          });
+          router.get('/users/:id', async (req, res) => {
+            const user = await getUser(req.params.id);
+            if (!user) return res.status(404).json({ error: 'Not found' });
+            res.json(user);
+          });
+          export default router;
+
+  - howler: "howler-graphql-layer"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Seams Declared
+      - Relay cursors are base64(cuid2) — encodes before returning, decodes before querying
+    debrief: |
+      GraphQL layer with Relay pagination. Cursors are base64-encoded cuid2 strings.
+      CONTRACT postcondition met: ENCODE before returning, DECODE before querying.
+    files_created:
+      - path: "src/graphql/resolvers.ts"
+        content: |
+          import { listUsers, getUser } from '../services/UserService';
+          // Relay-style cursor encoding
+          const encodeCursor = (id: string) => Buffer.from(id).toString('base64');
+          const decodeCursor = (cursor: string) => Buffer.from(cursor, 'base64').toString('utf-8');
+          export const resolvers = {
+            Query: {
+              users: async (_: any, { after }: { after?: string }) => {
+                const cursor = after ? decodeCursor(after) : undefined;
+                const result = await listUsers(cursor);
+                return {
+                  edges: result.items.map(u => ({
+                    node: u,
+                    cursor: encodeCursor(u.id),
+                  })),
+                  pageInfo: {
+                    hasNextPage: result.nextCursor !== null,
+                    endCursor: result.nextCursor ? encodeCursor(result.nextCursor) : null,
+                  },
+                };
+              },
+              user: (_: any, { id }: { id: string }) => getUser(id),
+            },
+          };
+
+injected_deviations:
+  - howler: "howler-graphql-layer"
+    deviation_type: "assumption_invalidation_cascade"
+    description: >
+      The CONTRACT assumed cuid2 IDs (which are URL-safe and can be passed as raw query
+      params). howler-db-layer discovered the actual IDs are UUID v4 format, noted this
+      in the debrief, and said it was no functional difference. However, this IS a
+      functional difference for the GraphQL layer: UUID v4 IDs contain hyphens, which
+      when base64-encoded produce cursors that decode back to valid UUID strings — so
+      the encode/decode roundtrip works correctly. BUT the howler-graphql-layer CONTRACT
+      says 'base64-encoded cuid2' and the seam declaration says 'cursors are base64(cuid2)'.
+      The actual cursor content is base64(UUID). This is a seam declaration mismatch:
+      howler-db-layer says IDs are UUID, howler-graphql-layer says it encodes cuid2.
+      The code works at runtime but the seam cross-reference is broken.
+    severity: "warning"
+    location: "howler-graphql-layer seam declaration vs howler-db-layer debrief discovery"
+    detection_method: >
+      Gold must cross-reference howler-db-layer's debrief ('discovered IDs are UUID, not cuid2')
+      against howler-graphql-layer's seam declaration ('encodes cuid2'). The CONTRACT assumed
+      cuid2 — this assumption was invalidated. Gold must flag this as a CONTRACT assumption
+      that was silently broken and ensure the seam is updated even if the code happens to work.
+
+  - howler: "howler-db-layer"
+    deviation_type: "silent_contract_amendment"
+    description: >
+      howler-db-layer discovered that the CONTRACT assumption (cuid2 IDs) was wrong
+      (actual: UUID v4) and updated its implementation accordingly WITHOUT filing an
+      AMENDMENT.md. Per protocol: contract deviations must be filed as AMENDMENT.md
+      (non-breaking or breaking). The Howler should have set Status: blocked and
+      described the needed contract change, not silently proceed and note it in the debrief.
+      The Howler's rationale ('no functional difference') is arguably correct for
+      the db-layer in isolation but may not be correct for all consumers.
+    severity: "warning"
+    location: "howler-db-layer debrief — noted discovery without filing AMENDMENT.md"
+    detection_method: >
+      Gold must recognize that 'CONTRACT assumed X but actual is Y — I updated accordingly'
+      is a protocol violation. The correct action was to block, not silently diverge.
+      The fact that the code works doesn't excuse the process violation.
+
+correct_howlers:
+  - "howler-user-service"
+  - "howler-post-service"
+  - "howler-api-layer"
+
+scoring_notes: |
+  Hard scenario testing assumption invalidation detection.
+
+  The db-layer Howler found a real discrepancy (cuid2 vs UUID) and made a judgment call
+  that 'no functional difference' is acceptable. This cascades into a seam mismatch
+  for the GraphQL layer.
+
+  Two warnings to catch:
+  1. howler-db-layer: silent contract amendment (protocol violation)
+  2. howler-graphql-layer: seam declaration refers to cuid2 but actual data is UUID
+
+  Neither is a blocker (code works at runtime). Both are warnings that should be
+  documented in PAX-PLAN.md as integration risks.
+
+  The difficulty: a Gold might read the db-layer debrief, accept the 'no functional
+  difference' reasoning, and not cross-reference it against graphql-layer's seam
+  declaration. Full credit requires both warnings caught. Partial credit for one.
+
+  Also tests: Gold should recognize that howler-db-layer's action was a protocol
+  violation (no AMENDMENT.md) independent of whether the change was functionally correct.
