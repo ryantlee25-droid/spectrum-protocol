@@ -48,7 +48,7 @@ mkdir -p ~/.claude/agents
 cp agents/*.md ~/.claude/agents/
 ```
 
-This installs all 14 agent definitions (Gold, Blue, Howler, White, Gray, Orange, Copper, Obsidian, Brown, Violet, Politico, Helldiver, Primus, Green).
+This installs all 14 agent definitions (Gold, Blue, Howler, White, Gray, Orange, Copper, Obsidian, Brown, Violet, Politico, Helldiver, Primus, Green) plus backward-compatibility symlinks (mayor→gold, rider→howler, etc.) so Claude Code's built-in `subagent_type` names continue to work.
 
 ### 3. Copy tooling
 
