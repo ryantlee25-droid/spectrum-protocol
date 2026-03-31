@@ -206,18 +206,6 @@ Howlers consume 76% of tokens but only 32% of cost (Sonnet pricing). Gold consum
 
 ---
 
-## Production History
-
-Spectrum has been run in 4 production spectrum runs by its author:
-- `convoy-v3-0328` -- documentation convoy (fragment+stitch pattern)
-- `remnant-infra-0329` -- infrastructure refactor
-- `remnant-narrative-0329` -- 7-pillar narrative overhaul (largest run: 7 Howlers)
-- `remnant-ux-0329` -- UX improvements
-
-Lessons from each run are captured in LESSONS.md and fed back into subsequent runs. The protocol has evolved through real usage, not just design.
-
----
-
 ## License
 
 [MIT](LICENSE)
