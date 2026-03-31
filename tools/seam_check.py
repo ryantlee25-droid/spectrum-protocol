@@ -22,12 +22,20 @@ from typing import Any, Optional
 # ── Files to skip when scanning for rider mailboxes ──────────────────────────
 SKIP_FILES = {
     "MANIFEST.md",
+    "LIGHT-MANIFEST.md",
     "CONTRACT.md",
     "SEAM-CHECK.md",
     "MERGE-PLAN.md",
+    "PAX-PLAN.md",
     "README.md",
     "AMENDMENT.md",
     "LESSONS.md",
+    "LESSONS-DRAFT.md",
+    "SENTINEL-REPORT.md",
+    "ARCHITECTURE.md",
+    "DESIGN.md",
+    "PROTOCOL-TEST-REPORT.md",
+    "CHECKPOINT.json",
 }
 
 
@@ -239,7 +247,9 @@ def load_mailboxes(convoy_dir: Path) -> list[dict]:
     Read all .md files in convoy_dir, skip known non-mailbox files,
     parse frontmatter, and return list of dicts with keys:
       filename, frontmatter, body
-    Only files with non-empty frontmatter AND a 'rider' key are included.
+    Accepts files with a 'rider' OR 'howler' key in frontmatter
+    (supports both legacy Convoy and Spectrum naming).
+    Also scans debrief-*.md files explicitly.
     """
     mailboxes = []
     for path in sorted(convoy_dir.glob("*.md")):
@@ -250,7 +260,17 @@ def load_mailboxes(convoy_dir: Path) -> list[dict]:
         except OSError:
             continue
         fm, body = _parse_frontmatter(text)
-        if fm and "rider" in fm:
+        if not fm:
+            # Warn about debrief/mailbox files that lack frontmatter
+            if path.name.startswith("debrief-") or path.name.startswith("howler-") or path.name.startswith("rider-"):
+                import sys
+                print(f"  [!] {path.name} has no YAML frontmatter — cannot parse seams/assumptions", file=sys.stderr)
+            continue
+        # Accept 'rider' (legacy) or 'howler' (Spectrum) as the agent identifier key
+        if "rider" in fm or "howler" in fm:
+            # Normalize: ensure 'rider' key exists for downstream processing
+            if "howler" in fm and "rider" not in fm:
+                fm["rider"] = fm["howler"]
             mailboxes.append({"filename": path.name, "frontmatter": fm, "body": body})
     return mailboxes
 

@@ -66,7 +66,7 @@ Spectrum activates when ALL are true:
       "rain_id": "...",
       "phase": "approved",
       "mode": "full|reaping",
-      "howlers": [{"name": "...", "status": "pending", "branch": "...", "worktree_path": "..."}],
+      "howlers": [{"name": "...", "status": "pending", "branch": "...", "worktree_path": "...", "commit": null}],
       "errors": [],
       "cost_tracking": {
         "budget_limit": null,
@@ -242,8 +242,10 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   8. COMPLETION VERIFICATION: Before declaring done, verify mechanically:
      - Every file in CREATES exists: ls -la {each file}
      - Every file in MODIFIES has been changed: git diff --name-only
-     - For TypeScript: tsc --noEmit passes
-     - For tests: test runner passes on your files
+     - For TypeScript (if node_modules exists): tsc --noEmit passes
+       (Skip if node_modules not installed — type checking defers to The Proving)
+     - For tests (if test framework installed): test runner passes on your files
+       (Skip if dependencies not installed — testing defers to The Proving)
      Write verification results in HOOK.md under '## Completion Verification'.
   9. When verified: run White + Gray + /diff-review in parallel (triple gate).
      Security criticals from /diff-review block the PR. High/medium = warning.
