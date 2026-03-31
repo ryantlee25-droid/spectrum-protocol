@@ -20,7 +20,26 @@ cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
 cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
 ```
 
-**Note:** If you already have a `~/.claude/CLAUDE.md`, back it up first. Spectrum's CLAUDE.md replaces it entirely -- it includes routing rules, model assignments, and the full protocol reference.
+**Note:** If you already have a `~/.claude/CLAUDE.md`, back it up first:
+
+```bash
+cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.backup
+```
+
+Spectrum's CLAUDE.md replaces it entirely. If you have custom rules you want to keep (project-specific conventions, personal preferences, other agent configs), merge them into Spectrum's CLAUDE.md after copying:
+
+```bash
+# Copy Spectrum's version
+cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
+
+# Then open and add your custom sections at the bottom:
+# - Project-specific conventions
+# - Custom routing rules
+# - Personal behavior preferences
+# Spectrum's CLAUDE.md has clear section headers so merging is straightforward.
+```
+
+Alternatively, put project-specific overrides in a project-level `CLAUDE.md` at your repo root — Claude Code reads both files and the project-level one takes precedence.
 
 ### 2. Copy agent definitions
 

@@ -1,36 +1,10 @@
 # Spectrum Protocol v4.0
 
-**A coordination protocol for parallel AI agents in Claude Code. Themed after Red Rising. Inspired by Gas Town.**
+**A coordination protocol for parallel AI agents in Claude Code.**
 
 Spectrum turns Claude Code's sub-agent system from a stateless dispatcher into a stateful, recoverable workspace. Workers maintain durable state, declare file ownership, communicate through structured debriefs, and follow a defined failure/recovery protocol.
 
 No dependencies. No build step. No database. Copy three files and you're running.
-
----
-
-## The Red Rising Theme
-
-Spectrum's agent names are drawn from the **Color caste system** in Pierce Brown's [Red Rising saga](https://www.piercebrown.com/) -- a science fiction series where society is stratified into Colors, each with a defined role. Golds command. Howlers execute the impossible. Whites judge. Obsidians guard the line.
-
-The theme isn't decorative. It makes agent roles instantly memorable and conversation logs readable at a glance. When you see "Gold dropped three Howlers," you know exactly what happened.
-
-## Lineage
-
-Spectrum exists because of [**steveyegge/gastown**](https://github.com/steveyegge/gastown) (13k+ stars), the first serious multi-agent orchestration system for Claude Code. Gas Town proved that parallel agents need persistent state (HOOK.md), structured communication (mailboxes), and health checks to work reliably.
-
-**How Spectrum differs from Gas Town:**
-
-| | Gas Town | Spectrum |
-|---|---|---|
-| Format | Compiled Go binary + daemon | Protocol-as-CLAUDE.md (plain text) |
-| Installation | `go install` + config | Copy 3 files |
-| Agent model | Generic workers | Typed Colors with defined responsibilities |
-| Coordination | Health checks + message passing | Frozen contracts + file ownership matrix + DAG dispatch |
-| Failure handling | Health check timeouts | Typed failure taxonomy (5 classes) + circuit breakers |
-| Plan review | None | Adversarial Politico review before freeze |
-| Integration | Post-merge validation | Independent Gold validation of worker self-reports |
-
-Gas Town is the better choice for large-scale deployments (20+ agents) and teams who want a production daemon. Spectrum is the better choice for teams who want protocol-level safety guarantees without installing anything.
 
 ---
 
@@ -250,8 +224,34 @@ Lessons from each run are captured in LESSONS.md and fed back into subsequent ru
 
 ---
 
-## Links
+## Naming: The Red Rising Theme
 
-- [Red Rising by Pierce Brown](https://www.piercebrown.com/) -- the naming inspiration
-- [steveyegge/gastown](https://github.com/steveyegge/gastown) -- the architectural inspiration
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) -- the platform Spectrum runs on
+Spectrum's agent names are drawn from the **Color caste system** in Pierce Brown's [Red Rising saga](https://www.piercebrown.com/) — a science fiction series where society is stratified into Colors, each with a defined role. Golds command. Howlers execute the impossible. Whites judge. Obsidians guard the line.
+
+---
+
+## Lineage & Inspiration
+
+Spectrum exists because of [**steveyegge/gastown**](https://github.com/steveyegge/gastown) (13k+ stars), the first serious multi-agent orchestration system for Claude Code. Gas Town proved that parallel agents need persistent state (HOOK.md), structured communication (mailboxes), and health checks to work reliably.
+
+**How Spectrum differs from Gas Town:**
+
+| | Gas Town | Spectrum |
+|---|---|---|
+| Format | Compiled Go binary + daemon | Protocol-as-CLAUDE.md (plain text) |
+| Installation | `go install` + config | Copy 3 files |
+| Agent model | Generic workers | Typed Colors with defined responsibilities |
+| Coordination | Health checks + message passing | Frozen contracts + file ownership matrix + DAG dispatch |
+| Failure handling | Health check timeouts | Typed failure taxonomy (5 classes) + circuit breakers |
+| Plan review | None | Adversarial Politico review before freeze |
+| Integration | Post-merge validation | Independent Gold validation of worker self-reports |
+
+Gas Town is the better choice for large-scale deployments (20+ agents) and teams who want a production daemon. Spectrum is the better choice for teams who want protocol-level safety guarantees without installing anything.
+
+### Additional Acknowledgments
+
+- [**Pierce Brown**](https://www.piercebrown.com/) — Red Rising created the Color system that makes Spectrum's agent roles instantly recognizable
+- [**Anthropic**](https://docs.anthropic.com/en/docs/claude-code) — Claude Code's sub-agent and worktree primitives are the foundation Spectrum builds on
+- **The ecosystem** — [Overstory](https://github.com/jayminwest/overstory) (structural tool enforcement), [Citadel](https://github.com/SethGammon/Citadel) (machine-verifiable phase conditions), [metaswarm](https://github.com/dsifry/metaswarm) (adversarial review gates), and [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (context preservation) each contributed innovations that influenced v4.0
+
+See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
