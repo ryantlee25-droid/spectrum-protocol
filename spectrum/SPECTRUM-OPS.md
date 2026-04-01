@@ -442,11 +442,66 @@ If wrong: halt Howler, fix, re-drop. Adds ~5s per Howler, prevents 10+ min debug
 ### Quality Gate Triggering
 
 **Per-Howler gate triggering**: Quality gates (White + Gray + /diff-review) trigger
-immediately when each individual Howler declares completion. Do NOT wait for all
+immediately when each individual Howler declares completion — Gold spawns them as
+visible background agents (see Gold Post-Howler Protocol below). Do NOT wait for all
 Howlers to finish before starting gates. On a 4-Howler run with staggered completion,
 this reclaims 8-15 minutes that would otherwise be spent waiting.
 
 PAX begins only after the last Howler completes (or fails). PRs may be opened while other Howlers are still running, provided PAX has not started.
+
+### Gold Post-Howler Protocol
+
+When a Howler returns with `Status: complete`, Gold runs the quality gate pipeline
+as separate, visible agents. This replaces the previous model where Howlers
+self-reviewed inside their own session.
+
+**For each completed Howler, Gold spawns in parallel:**
+
+1. **White** (code review):
+   ```
+   Agent(description="✦ Whites — reviewing {howler-name}", model="sonnet",
+         run_in_background=True, prompt="
+     Review the diff for {howler-name} in branch spectrum/{rain-id}/{howler-name}.
+     Read HOOK.md for confidence areas. Zero blockers required.
+     Output: structured Blocker/Warning/Suggestion report.
+   ")
+   ```
+
+2. **Gray** (test runner):
+   ```
+   Agent(description="⛨ Grays — testing {howler-name}", model="sonnet",
+         run_in_background=True, prompt="
+     Run tests for {howler-name}'s changes in branch spectrum/{rain-id}/{howler-name}.
+     Use the Test Impact Map from CONTRACT.md. Zero failures required.
+     Output: test results with pass/fail counts.
+   ")
+   ```
+
+3. **/diff-review** (security):
+   ```
+   Agent(description="✧ Oranges — security review {howler-name}", model="sonnet",
+         run_in_background=True, prompt="
+     Security-focused diff review for {howler-name}. Zero criticals required.
+     High/medium = warnings in PR description.
+   ")
+   ```
+
+**After all 3 return:**
+- All pass → spawn Copper: `Agent(description="▶ Coppers — PR for {howler-name}", model="haiku", ...)`
+- Any blocker → spawn Orange for diagnosis: `Agent(description="✧ Oranges — diagnosing {howler-name}", model="sonnet", ...)`
+- After Orange diagnosis → Gold decides: Resume Howler, Retry, or Restructure
+
+**Status roster update**: Gold prints an updated roster after each gate agent completes:
+```
+  » howler-auth  Worker     ✓ done
+    ✦ White      Reviewer   ● running
+    ⛨ Gray       Tester     ✓ pass
+    ✧ /diff-rev  Security   ✓ pass
+  » howler-api   Worker     ● running
+```
+
+**Nano mode exception**: In nano mode, Howlers self-verify (ls + HOOK.md note) and Gold
+skips the quality gate pipeline entirely. No White, Gray, or /diff-review agents spawn.
 
 ### Howler Drop Template
 ```
@@ -518,7 +573,7 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
         - State whether your implementation satisfies it (YES/NO/PARTIAL)
         - If NO or PARTIAL: what's missing and can you fix it now?
       If all postconditions are satisfied: write "All postconditions verified."
-      If any are PARTIAL or NO: fix before proceeding to step 10 (quality gates).
+      If any are PARTIAL or NO: fix before proceeding to step 10 (revision pass).
       For Howlers without postconditions (pure-create, nano mode): fall back to
       the original prose-based re-read ("Does my implementation resolve the task?
       What edge cases does the task imply? Is there anything I deprioritized?").
@@ -529,15 +584,15 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
       - Fix the issue
       - Re-run the failing tests
       - Update HOOK.md with what you fixed and why
-      Maximum 2 revision passes. If tests still fail after 2 passes, proceed to
-      quality gates and document the failures — White/Gray will catch them.
+      Maximum 2 revision passes. If tests still fail after 2 passes, document the
+      failures in HOOK.md and proceed to debrief — Gold will run the quality gate
+      and surface these failures to White and Gray with full context.
       If all tests passed on first try: skip this step.
-  11. When verified: run White + Gray + /diff-review in parallel (triple gate).
-     Security criticals from /diff-review block the PR. High/medium = warning.
-  12. Fix blockers. If blockers fixed, re-run White before proceeding.
-     (Max 2 Orange retries, then Status: blocked).
-  13. Write debrief to ~/.claude/spectrum/{rain-id}/{howler-name}.md
-  14. Open PR via Copper targeting main.
+  11. Write debrief to ~/.claude/spectrum/{rain-id}/{howler-name}.md
+      (Use the Debrief YAML Frontmatter template. Include open_exits and warnings.)
+  12. Signal completion: set Status: complete in HOOK.md. Your job ends here.
+      Gold will spawn White, Gray, and /diff-review — do not run these yourself.
+      Do not open a PR. Gold coordinates Copper after the gates pass.
 
   DISCOVERY RELAY (if provided):
   {compressed_findings from previously-completed Howlers — ~500 tokens max.
@@ -738,25 +793,31 @@ Human merges PRs in PAX-PLAN.md order. Dependencies merge first.
 
 1. Run Gray on fully merged main (final integration check)
 2. Fix integration failures as sequential follow-up
-3. Drop **Obsidian** — verifies PLAN.md (+ DESIGN.md if present) against merged code → SENTINEL-REPORT.md
-   - COMPLIANT → proceed. PARTIAL/NON-COMPLIANT → human decides.
-4. Drop **Brown** — drafts LESSONS.md + ENTITIES.md updates from Spectrum artifacts → LESSONS-DRAFT.md. Brown's prompt must include:
+3. Spawn **Obsidian** as a visible background agent:
    ```
-   Write a LESSONS.md draft entry covering what worked, what failed, and timing observations.
-   Additionally, extract any recurring failure patterns into a `## Known Failure Patterns`
-   section at the bottom of LESSONS.md. Each pattern entry follows this format:
-
-   ### Pattern: {short name}
-   - **Task type**: {what kind of task triggers this}
-   - **Failure mode**: {what goes wrong}
-   - **Signal**: {how to detect the risk before it happens}
-   - **Mitigation**: {what to do differently}
+   Agent(run_in_background=True, model="sonnet",
+     description="⊘ Obsidians — spec compliance",
+     prompt="
+       Verify PLAN.md acceptance criteria against merged code.
+       Write SENTINEL-REPORT.md with per-criterion PASS/PARTIAL/FAIL verdicts.
+     ")
    ```
-5. Gold reviews and commits LESSONS.md to `~/.claude/projects/<project-slug>/memory/LESSONS.md`
-6. Gold curates ENTITIES.md — merge Brown additions, remove stale entries
-7. Record scaling observations (over/under-decomposed tasks) in LESSONS.md
-8. Set CHECKPOINT.json phase to "complete"
-9. Delete Spectrum directory
+   - COMPLIANT → proceed. PARTIAL/NON-COMPLIANT → present to human before continuing.
+4. Spawn **Brown** as a visible background agent after Obsidian completes:
+   ```
+   Agent(run_in_background=True, model="haiku",
+     description="⌂ Browns — lessons learned",
+     prompt="
+       Read all spectrum artifacts. Draft LESSONS.md entry with decomposition
+       patterns, contract friction, failure modes, timing, and Known Failure
+       Patterns. Write to ~/.claude/spectrum/{rain-id}/LESSONS-DRAFT.md
+     ")
+   ```
+   Gold reviews the draft before committing LESSONS.md to `~/.claude/projects/<project-slug>/memory/LESSONS.md`.
+5. Gold curates ENTITIES.md — merge Brown additions, remove stale entries
+6. Record scaling observations (over/under-decomposed tasks) in LESSONS.md
+7. Set CHECKPOINT.json phase to "complete"
+8. Delete Spectrum directory
 
 ---
 
