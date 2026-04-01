@@ -1,0 +1,92 @@
+diff --git a/src/api/posts.ts b/src/api/posts.ts
+new file mode 100644
+index 0000000..e9f7a22
+--- /dev/null
++++ b/src/api/posts.ts
+@@ -0,0 +1,78 @@
++import { Request, Response } from 'express';
++import { db } from '../db';
++import { Post } from '../types';
++
++const DEFAULT_PAGE_SIZE = 20;
++const MAX_PAGE_SIZE = 100;
++
++/**
++ * Returns a paginated list of published posts.
++ * GET /api/posts?page=<n>&limit=<n>
++ *
++ * Pages are 1-indexed (page=1 is the first page).
++ */
++export async function getPosts(req: Request, res: Response): Promise<void> {
++  const page = parseInt(req.query.page as string) || 1;
++  const limit = Math.min(
++    parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE,
++    MAX_PAGE_SIZE
++  );
++
++  const totalCount = await db.posts.count({ published: true });
++  const totalPages = Math.ceil(totalCount / limit);
++
++  // Calculate offset for this page
++  const offset = page * limit;
++
++  const posts = await db.posts.find(
++    { published: true },
++    { skip: offset, limit, sort: { createdAt: -1 } }
++  );
++
++  res.json({
++    posts,
++    pagination: {
++      page,
++      limit,
++      totalCount,
++      totalPages,
++      hasNext: page < totalPages,
++      hasPrev: page > 1,
++    },
++  });
++}
++
++/**
++ * Returns a single post by slug.
++ * GET /api/posts/:slug
++ */
++export async function getPostBySlug(req: Request, res: Response): Promise<void> {
++  const { slug } = req.params;
++  const post = await db.posts.findOne({ slug, published: true });
++
++  if (!post) {
++    res.status(404).json({ error: 'Post not found' });
++    return;
++  }
++
++  res.json({ post });
++}
++
++/**
++ * Returns all posts for a given tag.
++ * GET /api/posts/tag/:tag?page=<n>&limit=<n>
++ */
++export async function getPostsByTag(req: Request, res: Response): Promise<void> {
++  const { tag } = req.params;
++  const page = parseInt(req.query.page as string) || 1;
++  const limit = Math.min(
++    parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE,
++    MAX_PAGE_SIZE
++  );
++
++  const totalCount = await db.posts.count({ tags: tag, published: true });
++  const totalPages = Math.ceil(totalCount / limit);
++  const offset = page * limit;
++
++  const posts = await db.posts.find(
++    { tags: tag, published: true },
++    { skip: offset, limit, sort: { createdAt: -1 } }
++  );
++
++  res.json({
++    posts,
++    pagination: { page, limit, totalCount, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
++  });
++}
