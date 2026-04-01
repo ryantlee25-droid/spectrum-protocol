@@ -56,14 +56,29 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
     - Shared types, interfaces, constants that multiple Howlers depend on
     - Naming conventions and patterns Howlers must follow
     - Per-Howler `## Codebase Context` section: Gold reads each file in the Howler's MODIFIES list and summarizes existing function signatures relevant to the task, patterns in use (e.g., "uses factory pattern", "all exports are named, not default"), and any gotchas observed (e.g., "this file has a circular import with X — avoid touching the import block"). Keep summaries to 5–15 lines per file. For Howlers with no MODIFIES files (all CREATES): write `## Codebase Context: N/A (all new files)`.
-      Gold MAY use `tools/codebase_index.py` to generate structured codebase context
-      automatically. The tool extracts import graphs, function signatures, and patterns
-      for each file in the Howler's MODIFIES list. Output is ready to paste into
-      CONTRACT.md's per-Howler Codebase Context section.
+      Gold MUST run `tools/codebase_index.py` when it exists. The tool extracts import
+      graphs, function signatures, and patterns for each file in the Howler's MODIFIES
+      list. Output is ready to paste into CONTRACT.md's per-Howler Codebase Context
+      section. If the tool is unavailable, Gold writes prose summaries as fallback
+      (5–15 lines per file).
       Usage: `python3 tools/codebase_index.py --files {MODIFIES list} --root {project_root}`
     - Integration points (what connects to what)
     - Design-by-Contract per Howler — full DbC for interface-heavy Howlers, conventions-only for pure-create Howlers
     - Test impact map per Howler: output of `python3 tools/test_impact_map.py --files {MODIFIES+CREATES} --root {project_root}` — which test files cover the Howler's owned files
+10.5. **Issue Confirmation Gate** — After writing CONTRACT.md, before running White Pre-Check or
+    Politico, Gold displays to the human:
+
+    > "Here is what I understood this issue to require:
+    > - **Problem**: [one sentence]
+    > - **Desired behavior**: [one sentence]
+    > - **Out of scope**: [what was excluded and why]
+    > Confirm or correct before I freeze the contract."
+
+    Gold also writes a `## Issue Interpretation` block at the **top** of CONTRACT.md with these
+    three bullets. Human confirms or redirects. If redirected, Gold revises CONTRACT.md and
+    repeats the gate. **Do not proceed to White Pre-Check or Politico until confirmed.**
+    **Skip for reaping mode and nano mode** (those modes do not produce a full CONTRACT.md).
+
 11. **Pre-freeze review (parallel)** — Gold spawns White Pre-Check AND Politico
     simultaneously. They run in parallel:
     - White Pre-Check: verifies factual accuracy of CONTRACT.md against the codebase
@@ -89,20 +104,32 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
     **Skip White Pre-Check for reaping mode and nano mode.**
 12. **Contract-to-test generation** (TypeScript/Python spectrum runs only) — for each Howler
     with postconditions in CONTRACT.md, Gold generates a stub test file at
-    `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts each postcondition is
-    satisfied (file exists, type exports correctly, function signatures match). Stage alongside
-    convoy-contracts.d.ts and commit together in step 13. Howlers run these contract tests as
-    part of completion verification. **Skip for doc-only spectrums, nano mode, and reaping mode**
-    (reaping mode uses simplified contracts with no per-Howler DbC sections, so there are no
-    postconditions to test).
+    `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts **structural
+    postconditions only**. Generate test stubs ONLY for:
+    - **File existence**: "src/types/auth.ts exists"
+    - **Export presence**: "module exports UserSession"
+    - **Type shape**: "UserSession.role is 'admin' | 'member'"
 
-    Example contract test stub (TypeScript):
+    Do NOT generate tests for behavioral postconditions ("the auth middleware returns 401 for
+    expired tokens", "function returns X under condition Y", business logic). Behavioral
+    postconditions belong in CONTRACT.md as documentation targets for Gray — Gray verifies
+    runtime behavior during the quality gate after implementation, where it has the actual code
+    to test against. Attempting to generate behavioral tests at muster time produces either
+    trivially passing tests (false confidence) or tests with Gold-introduced bugs.
+
+    Stage structural contract test stubs alongside convoy-contracts.d.ts and commit together
+    in step 13. Howlers run these contract tests as part of completion verification.
+    **Skip for doc-only spectrums, nano mode, and reaping mode** (reaping mode uses simplified
+    contracts with no per-Howler DbC sections, so there are no structural postconditions to test).
+
+    Example contract test stub (TypeScript — structural assertions only):
     ```typescript
     // tests/spectrum/howler-auth.contract.test.ts
-    // Auto-generated from CONTRACT.md postconditions — do not edit manually
+    // Auto-generated from CONTRACT.md structural postconditions — do not edit manually
+    // Behavioral postconditions are verified by Gray during the quality gate.
     import { describe, it, expect } from 'vitest';
 
-    describe('howler-auth postconditions', () => {
+    describe('howler-auth structural postconditions', () => {
       it('src/types/auth.ts exports UserSession', async () => {
         const mod = await import('@/types/auth');
         expect(mod.UserSession).toBeDefined();
@@ -178,6 +205,7 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
 - [ ] LESSONS.md + ENTITIES.md incorporated
 - [ ] Test impact map generated for each Howler's MODIFIES/CREATES files (run tools/test_impact_map.py; include output in CONTRACT.md per Howler)
 - [ ] Codebase context sections written in CONTRACT.md for each Howler's MODIFIES files (existing function signatures, patterns, gotchas — 5-15 lines per file; skip for Howlers with CREATES-only file lists)
+- [ ] Issue Confirmation Gate passed — human confirmed 3-bullet interpretation (problem, desired behavior, out of scope) before White Pre-Check (skip for reaping mode and nano mode)
 - [ ] White Pre-Check completed — all STALE/MISSING/MISMATCH findings patched or documented as ASSUMPTION in CONTRACT.md (skip for reaping mode and nano mode)
 - [ ] Contract test stubs generated and committed for each Howler with postconditions (skip for doc-only, nano mode, and reaping mode)
 - [ ] Adversarial Politico review completed (blockers addressed, warnings documented) — skip for reaping mode
@@ -474,6 +502,8 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
      - For tests (if test framework installed): run the specific test files listed in your
        ## Test Impact Map (from CONTRACT.md). If no map was provided, run tests on your owned
        files. Tests must pass; coverage gaps are warnings, not blockers.
+       For files marked [none-found] in the impact map, run the full test suite rather than
+       relying on the impact map — no targeted tests were found for those files.
        (Skip if dependencies not installed — testing defers to the quality gate)
      - Contract tests: run `tests/spectrum/{howler-name}.contract.test.{ts|py}` — these verify
        your CONTRACT.md postconditions are satisfied. All must pass before quality gates.
@@ -481,13 +511,17 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
        run `python3 tools/verify_postconditions.py --contract {path} --howler {name} --root {project}`
        All postconditions must pass. Failures are blockers.
      Write verification results in HOOK.md under '## Completion Verification'.
-  9. ISSUE RE-READ: After mechanical verification, re-read the original Task
-      above (not just the file list — the full task description). Write a 3–5
-      line assessment in HOOK.md under '## Issue Re-Read':
-        - "Does my implementation resolve the stated problem end-to-end?"
-        - "What edge cases does the task imply that I may not have handled?"
-        - "Is there anything in the task description I deprioritized?"
-      If you identify a gap, fix it before moving to step 11 (quality gates).
+  9. ISSUE RE-READ: After mechanical verification, re-read your CONTRACT.md
+      postconditions section. For each postcondition, write a one-line assessment
+      in HOOK.md under '## Issue Re-Read':
+        - State the postcondition
+        - State whether your implementation satisfies it (YES/NO/PARTIAL)
+        - If NO or PARTIAL: what's missing and can you fix it now?
+      If all postconditions are satisfied: write "All postconditions verified."
+      If any are PARTIAL or NO: fix before proceeding to step 10 (quality gates).
+      For Howlers without postconditions (pure-create, nano mode): fall back to
+      the original prose-based re-read ("Does my implementation resolve the task?
+      What edge cases does the task imply? Is there anything I deprioritized?").
       If no gaps: write "Issue re-read: no gaps identified." and proceed.
   10. REVISION PASS: If completion verification or contract tests revealed failures:
       - Read the test output and error messages carefully
@@ -560,8 +594,10 @@ MODIFIES: {files}
 - [ ] Postcondition verification passes: {verify_postconditions.py results or N/A if no DbC}
 
 ## Issue Re-Read
-- [ ] Re-read original task
-- Assessment: {3-5 line correctness assessment or "no gaps identified"}
+- [ ] Re-read CONTRACT.md postconditions (or original task if no postconditions)
+- {postcondition}: {YES/NO/PARTIAL} — {one-line evidence or what's missing}
+- {postcondition}: {YES/NO/PARTIAL} — {one-line evidence or what's missing}
+- Summary: {"All postconditions verified." | "Issue re-read: no gaps identified." | gaps and fix plan}
 
 ## Revision Pass
 - Pass 1: {what failed, what was fixed, or "all tests passed — no revision needed"}

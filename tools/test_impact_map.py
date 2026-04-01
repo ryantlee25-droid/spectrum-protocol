@@ -189,11 +189,23 @@ def find_by_import(
 
 # ── Main mapping logic ────────────────────────────────────────────────────────
 
-def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]]:
-    """
-    For each source file, return the set of test files that cover it.
+# Confidence levels for test mappings
+CONFIDENCE_NAME_MATCH = "name-match"   # Found via naming convention (high confidence)
+CONFIDENCE_IMPORT_GREP = "import-grep"  # Found via import/require grep (medium confidence)
+CONFIDENCE_NONE_FOUND = "none-found"    # No test file found for this source file
 
-    Returns dict: source_file_str → sorted list of test file Paths (relative to root).
+
+def build_impact_map(
+    source_files: list[str], root: str
+) -> dict[str, tuple[list[Path], str]]:
+    """
+    For each source file, return the set of test files that cover it and a confidence indicator.
+
+    Returns dict: source_file_str → (sorted list of test file Paths relative to root, confidence).
+    Confidence is one of: CONFIDENCE_NAME_MATCH, CONFIDENCE_IMPORT_GREP, CONFIDENCE_NONE_FOUND.
+
+    When both convention and import matches are found, name-match takes precedence (higher
+    confidence). If only import matches exist, import-grep is used. If no matches, none-found.
     """
     root_path = Path(root).expanduser().resolve()
     all_test_files = find_all_test_files(root_path)
@@ -207,7 +219,7 @@ def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]
         except OSError:
             test_content_cache[tf] = ""
 
-    result: dict[str, list[Path]] = {}
+    result: dict[str, tuple[list[Path], str]] = {}
 
     for src_str in source_files:
         src_path = Path(src_str).expanduser()
@@ -216,14 +228,25 @@ def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]
         else:
             src_path = src_path.resolve()
 
-        # Convention-based matches
+        # Convention-based matches (high confidence)
         convention_matches = find_by_convention(src_path, all_test_files)
 
-        # Import-based matches — reuse the pre-loaded content cache
+        # Import-based matches — reuse the pre-loaded content cache (medium confidence)
         import_matches = find_by_import(src_path, all_test_files, content_cache=test_content_cache)
 
-        # Merge and deduplicate
-        combined = list({tf.resolve(): tf for tf in convention_matches + import_matches}.values())
+        # Determine confidence: name-match wins if any convention match exists
+        convention_set = {tf.resolve() for tf in convention_matches}
+        import_only = [tf for tf in import_matches if tf.resolve() not in convention_set]
+
+        if convention_matches:
+            confidence = CONFIDENCE_NAME_MATCH
+        elif import_matches:
+            confidence = CONFIDENCE_IMPORT_GREP
+        else:
+            confidence = CONFIDENCE_NONE_FOUND
+
+        # Merge and deduplicate (convention first, then import-only additions)
+        combined = list({tf.resolve(): tf for tf in convention_matches + import_only}.values())
         combined.sort(key=lambda p: str(p))
 
         # Make paths relative to root for clean output
@@ -235,13 +258,24 @@ def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]
             except ValueError:
                 relative.append(tf)
 
-        result[src_str] = relative
+        result[src_str] = (relative, confidence)
 
     return result
 
 
-def format_output(impact_map: dict[str, list[Path]]) -> str:
-    """Format the impact map as a ## Test Impact Map block."""
+def format_output(impact_map: dict[str, tuple[list[Path], str]]) -> str:
+    """Format the impact map as a ## Test Impact Map block.
+
+    Each line includes a confidence indicator in brackets:
+      src/auth/login.ts → tests/auth/login.test.ts [name-match]
+      src/utils/cache.ts → tests/utils/cache.test.ts [import-grep]
+      src/utils/helpers.ts → (none found) [none-found]
+
+    Confidence levels:
+      [name-match]  — test file found by naming convention (high confidence)
+      [import-grep] — test file found by import/require grep (medium confidence)
+      [none-found]  — no test file found; run the full test suite for this file
+    """
     lines = ["## Test Impact Map"]
 
     all_test_files: set[str] = set()
@@ -251,14 +285,15 @@ def format_output(impact_map: dict[str, list[Path]]) -> str:
         lines.append("Total: 0 test files to verify")
         return "\n".join(lines)
 
-    for src, tests in impact_map.items():
+    for src, (tests, confidence) in impact_map.items():
+        indicator = f"[{confidence}]"
         if tests:
             test_list = ", ".join(str(t) for t in tests)
-            lines.append(f"{src} → {test_list}")
+            lines.append(f"{src} → {test_list} {indicator}")
             for t in tests:
                 all_test_files.add(str(t))
         else:
-            lines.append(f"{src} → (no tests found)")
+            lines.append(f"{src} → (none found) {indicator}")
 
     total = len(all_test_files)
     lines.append(f"Total: {total} test file{'s' if total != 1 else ''} to verify")
