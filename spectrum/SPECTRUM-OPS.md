@@ -36,7 +36,7 @@ Spectrum activates when ALL are true:
 
 1. Generate rain ID (short slug: `auth-refactor-0329`)
 2. Create `~/.claude/spectrum/<rain-id>/`
-3. Read `LESSONS.md` + `ENTITIES.md` if present
+3. Read `LESSONS.md` + `ENTITIES.md` if present. If LESSONS.md contains a `## Known Failure Patterns` section, scan for patterns matching the current spectrum's task types and include relevant ones in each Howler's drop prompt under `KNOWN RISKS (from prior spectrums)`.
 4. **Validate PLAN.md** — sample 3-5 files to verify gap claims are current; flag stale assumptions. If PLAN.md is stale, have Blue refresh it before proceeding.
 5. Evaluate scale: 3+ tasks = Spectrum, 2 = consider sequential, 1 = single-agent
 6. **Update ARCHITECTURE.md** — persistent file at `~/.claude/projects/<slug>/ARCHITECTURE.md`. If exists: read it, patch only changed sections (new files, removed modules, dependency shifts). If not: create (~50-100 lines). Copy to Spectrum directory. **Never regenerate from scratch.**
@@ -70,8 +70,14 @@ Spectrum activates when ALL are true:
     For each finding that cannot be fixed (e.g., a file genuinely needs to be created as a
     precondition), document it as an `[ASSUMPTION: unverifiable, reason]` in CONTRACT.md.
     **Skip for reaping mode and nano mode.**
-12. For TypeScript: commit `convoy-contracts.d.ts` to base branch
-13. **Adversarial plan review (Phase 1.5: The Passage)** — drop Politico (Sonnet) with:
+12. **Contract-to-test generation** (TypeScript/Python spectrum runs only) — for each Howler
+    with postconditions in CONTRACT.md, Gold generates a stub test file at
+    `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts each postcondition is
+    satisfied (file exists, type exports correctly, function signatures match). Commit alongside
+    convoy-contracts.d.ts. Howlers run these contract tests as part of completion verification.
+    **Skip for doc-only spectrums and nano mode.**
+13. For TypeScript: commit `convoy-contracts.d.ts` to base branch
+14. **Adversarial plan review (Phase 1.5: The Passage)** — drop Politico (Sonnet) with:
     ```
     "Read MANIFEST.md and CONTRACT.md for Spectrum {id}. You are the adversary.
     Find: (a) file ownership gaps — files needed but missing from the matrix,
@@ -84,8 +90,8 @@ Spectrum activates when ALL are true:
     interface design*, not re-checking file existence."
     ```
     Gold addresses Politico's blockers before freezing CONTRACT.md. Warnings are documented in MANIFEST.md. **Skip for reaping mode.**
-14. Present to human → explicitly flag high-risk seams + Politico concerns accepted-with-rationale → **do not drop until confirmed**
-15. Write initial **CHECKPOINT.json** with schema:
+15. Present to human → explicitly flag high-risk seams + Politico concerns accepted-with-rationale → **do not drop until confirmed**
+16. Write initial **CHECKPOINT.json** with schema:
     ```json
     {
       "rain_id": "...",
@@ -120,6 +126,7 @@ Spectrum activates when ALL are true:
 - [ ] Test impact map generated for each Howler's MODIFIES/CREATES files (run tools/test_impact_map.py; include output in CONTRACT.md per Howler)
 - [ ] Codebase context sections written in CONTRACT.md for each Howler's MODIFIES files (existing function signatures, patterns, gotchas — 5-15 lines per file)
 - [ ] White Pre-Check completed — all STALE/MISSING/MISMATCH findings patched or documented as ASSUMPTION in CONTRACT.md (skip for reaping mode and nano mode)
+- [ ] Contract test stubs generated and committed for each Howler with postconditions (skip for doc-only and nano mode)
 - [ ] Adversarial Politico review completed (blockers addressed, warnings documented) — skip for reaping mode
 - [ ] High-risk seams and accepted Politico concerns flagged for human review
 - [ ] ARCHITECTURE.md updated (persistent, incremental — never regenerated)
@@ -369,6 +376,8 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
        ## Test Impact Map (from CONTRACT.md). If no map was provided, run tests on your owned
        files. Tests must pass; coverage gaps are warnings, not blockers.
        (Skip if dependencies not installed — testing defers to The Proving)
+     - Contract tests: run `tests/spectrum/{howler-name}.contract.test.{ts|py}` — these verify
+       your CONTRACT.md postconditions are satisfied. All must pass before quality gates.
      Write verification results in HOOK.md under '## Completion Verification'.
   8b. ISSUE RE-READ: After mechanical verification, re-read the original Task
       above (not just the file list — the full task description). Write a 3–5
@@ -378,6 +387,15 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
         - "Is there anything in the task description I deprioritized?"
       If you identify a gap, fix it before moving to step 9 (quality gates).
       If no gaps: write "Issue re-read: no gaps identified." and proceed.
+  8c. REVISION PASS: If completion verification or contract tests revealed failures:
+      - Read the test output and error messages carefully
+      - Identify the root cause (not just the symptom)
+      - Fix the issue
+      - Re-run the failing tests
+      - Update HOOK.md with what you fixed and why
+      Maximum 2 revision passes. If tests still fail after 2 passes, proceed to
+      quality gates and document the failures — White/Gray will catch them.
+      If all tests passed on first try: skip this step.
   9. When verified: run White + Gray + /diff-review in parallel (triple gate).
      Security criticals from /diff-review block the PR. High/medium = warning.
   10. Fix blockers. If blockers fixed, re-run White before proceeding.
@@ -389,6 +407,9 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   {compressed_findings from previously-completed Howlers — ~500 tokens max.
    Use these as context but do NOT depend on them for correctness.
    Your CONTRACT.md is the source of truth, not relay content.}
+
+  KNOWN RISKS (from prior spectrums — if any match this task type):
+  {Gold injects 0-3 relevant failure patterns from LESSONS.md ## Known Failure Patterns. If none match, omit this section.}
 ")
 ```
 
@@ -438,6 +459,10 @@ MODIFIES: {files}
 ## Issue Re-Read
 - [ ] Re-read original task
 - Assessment: {3-5 line correctness assessment or "no gaps identified"}
+
+## Revision Pass
+- Pass 1: {what failed, what was fixed, or "all tests passed — no revision needed"}
+- Pass 2: {if needed — what failed, what was fixed}
 
 ## Blockers
 - (none)
@@ -576,7 +601,18 @@ Human merges PRs in PAX-PLAN.md order. Dependencies merge first.
 2. Fix integration failures as sequential follow-up
 3. Drop **Obsidian** — verifies PLAN.md (+ DESIGN.md if present) against merged code → SENTINEL-REPORT.md
    - COMPLIANT → proceed. PARTIAL/NON-COMPLIANT → human decides.
-4. Drop **Brown** — drafts LESSONS.md + ENTITIES.md updates from Spectrum artifacts → LESSONS-DRAFT.md
+4. Drop **Brown** — drafts LESSONS.md + ENTITIES.md updates from Spectrum artifacts → LESSONS-DRAFT.md. Brown's prompt must include:
+   ```
+   Write a LESSONS.md draft entry covering what worked, what failed, and timing observations.
+   Additionally, extract any recurring failure patterns into a `## Known Failure Patterns`
+   section at the bottom of LESSONS.md. Each pattern entry follows this format:
+
+   ### Pattern: {short name}
+   - **Task type**: {what kind of task triggers this}
+   - **Failure mode**: {what goes wrong}
+   - **Signal**: {how to detect the risk before it happens}
+   - **Mitigation**: {what to do differently}
+   ```
 5. Gold reviews and commits LESSONS.md to `~/.claude/projects/<project-slug>/memory/LESSONS.md`
 6. Gold curates ENTITIES.md — merge Brown additions, remove stale entries
 7. Record scaling observations (over/under-decomposed tasks) in LESSONS.md
@@ -639,6 +675,7 @@ Evaluate whether CONTRACT.md and MANIFEST.md can be expressed as Lead context + 
 - Scope alignment check every 20 tool calls (re-read task + CONTRACT.md, log alignment)
 - Completion verification is mechanical (ls, git diff, tsc, tests) before declaring done
 - Issue re-read mandatory after completion verification — correctness assessment before quality gates
+- Revision pass: max 2 attempts to fix test failures before escalating to quality gates
 - Heartbeat every 30 tool calls or 1 hour — 4+ hours without update = stuck escalation
 
 **Quality & Recovery:**
