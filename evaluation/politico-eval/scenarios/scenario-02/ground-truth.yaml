@@ -1,0 +1,128 @@
+scenario_id: "politico-02"
+difficulty: "easy"
+domain: "REST API"
+description: >
+  4-Howler Express REST API. howler-auth builds JWT middleware, howler-routes builds
+  route handlers, howler-middleware builds cross-cutting middleware, howler-tests is
+  sequential. Three planted bugs: src/app.ts missing from ownership matrix, error
+  response type not defined in contract, and howler-tests parallelism flaw.
+
+planted_bugs:
+  - bug_id: "bug-01"
+    category: "ownership_gap"
+    severity: "blocker"
+    location: "MANIFEST.md file ownership matrix"
+    description: >
+      src/app.ts (the Express application factory that wires together routes, middleware,
+      and error handlers) is absent from the ownership matrix. Both howler-routes and
+      howler-middleware require it to exist to register their handlers — the integration
+      point in CONTRACT.md ("routes registered before error handler in app factory")
+      explicitly references it. Without owning src/app.ts, no Howler will create it and
+      howler-tests cannot instantiate the app for integration testing.
+    expected_finding: |
+      Politico should flag that src/app.ts (the Express app factory) is missing from
+      the ownership matrix. The CONTRACT.md integration points section references it
+      explicitly ("routes registered before error handler in app factory") but no
+      Howler claims it. howler-tests' convention says to create a test helper that
+      avoids importing from src/app.ts — but the app.ts still needs to exist for
+      production use. One Howler (likely howler-middleware or howler-routes) must own
+      it.
+    scoring:
+      full_credit_if: >
+        Names src/app.ts specifically AND notes it is referenced in the contract but
+        unclaimed AND suggests which Howler should own it
+      partial_credit_if: >
+        Notes that an Express app factory or app entry point is missing from the matrix
+        without naming the specific file path
+      no_credit_if: >
+        Misses the gap entirely, or mentions app.ts only in an Accepted section
+
+  - bug_id: "bug-02"
+    category: "contract_ambiguity"
+    severity: "blocker"
+    location: "CONTRACT.md — missing error response type"
+    description: >
+      The contract defines AuthenticatedRequest and AppConstants but never defines a
+      shared error response shape. howler-auth's postconditions say "authentication
+      failures return HTTP 401 with a structured error body," howler-routes says
+      "invalid requests return HTTP 400," and howler-middleware owns the errorHandler —
+      but no type definition specifies what "structured error body" means. Each Howler
+      could independently define incompatible error shapes: { error: string },
+      { message: string, code: number }, { errors: string[] }, etc. howler-tests will
+      then assert against one shape, breaking on the others.
+    expected_finding: |
+      Politico should flag that no shared error response type (e.g., ApiError or
+      ErrorResponse) is defined in the contract. Three Howlers produce error responses
+      (howler-auth returns 401 bodies, howler-routes returns 400 bodies, howler-middleware
+      owns the error handler) but nothing specifies the shape. The contract must define
+      an ErrorResponse interface that all three Howlers use.
+    scoring:
+      full_credit_if: >
+        Identifies the missing error response type definition AND names at least two
+        Howlers that produce incompatible error responses AND notes the risk to
+        howler-tests' assertions
+      partial_credit_if: >
+        Notes that error response format is underspecified without naming the specific
+        Howlers affected or the test assertion risk
+      no_credit_if: >
+        Accepts the contract as complete with respect to error handling, or mentions
+        error types only as an observation without a concrete fix
+
+  - bug_id: "bug-03"
+    category: "decomposition_flaw"
+    severity: "blocker"
+    location: "MANIFEST.md DAG — howler-tests dependency"
+    description: >
+      howler-tests is declared as depending on howler-auth, howler-routes, and
+      howler-middleware, which looks correct. However, howler-tests' conventions in
+      CONTRACT.md say "Create an Express app instance in a tests/helpers/app.ts test
+      helper — do not import from src/app.ts." This means howler-tests must assemble
+      the application itself — wiring routes, middleware, and error handler in the
+      correct order. This is not a pure test-writing task; it requires knowing the
+      correct middleware registration order (logger → rateLimiter → routes → errorHandler),
+      which is an integration concern that should be owned by one of the implementation
+      Howlers. howler-tests is effectively doing integration work that wasn't modeled
+      in the manifest.
+    expected_finding: |
+      Politico should flag that howler-tests is responsible for assembling the Express
+      application in tests/helpers/app.ts. This is an implicit implementation task —
+      howler-tests must know the correct middleware ordering (logger, rate limiter, routes,
+      error handler) to produce a valid app. This creates a hidden design dependency:
+      howler-tests must make architectural decisions that should have been made during
+      muster. Either src/app.ts should exist and be owned by an implementation Howler
+      (resolving bug-01), or the app factory logic in the test helper should be
+      specified in the contract.
+    scoring:
+      full_credit_if: >
+        Identifies that howler-tests is assembling the app factory (tests/helpers/app.ts)
+        AND notes this requires knowing the middleware registration order AND connects
+        this to the missing src/app.ts ownership gap
+      partial_credit_if: >
+        Notes the app assembly concern without connecting it to middleware ordering or
+        the src/app.ts gap
+      no_credit_if: >
+        Accepts the test helper approach as unambiguous, or misses the hidden
+        implementation work in howler-tests
+
+clean_elements:
+  - element_id: "clean-01"
+    location: "MANIFEST.md file ownership matrix — src/constants.ts"
+    description: >
+      src/constants.ts is owned by howler-middleware and the constants it defines
+      (JWT_ALGORITHM) are also imported by howler-auth. This could look like a
+      shared ownership problem — howler-auth needs JWT_ALGORITHM but doesn't own
+      constants.ts. However, this is correctly modeled: howler-middleware owns
+      constants.ts, howler-auth imports from it. The integration point is documented
+      in the contract. The #types checkpoint dep is not modeled for this (howler-auth
+      has no deps) which could look suspicious, but JWT_ALGORITHM is a compile-time
+      constant that doesn't require a STABLE checkpoint — howler-auth can start with
+      a local placeholder and import the real value after merge.
+    expected_handling: >
+      Politico should accept constants.ts ownership as correct, or not mention it.
+      The import relationship is documented in the integration points table.
+    false_positive_if: >
+      Politico flags constants.ts as a shared ownership conflict, or says howler-auth
+      needs to depend on howler-middleware#types for the JWT_ALGORITHM constant
+
+false_positive_threshold: 0.20
+pass_threshold: 0.85

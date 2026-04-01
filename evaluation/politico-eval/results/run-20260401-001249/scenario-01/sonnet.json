@@ -1,0 +1,92 @@
+{
+  "scenario_id": "scenario-01",
+  "model": "sonnet",
+  "model_id": "claude-sonnet-4-6-20250320",
+  "raw_output": "# Politico Review\n_Rain ID: blog-launch-0331 | Reviewed: 2026-03-31_\n\n---\n\n## Blockers (must address before drop)\n\n### 1. `package.json` absent from ownership matrix\n**Category**: Ownership Gap\n**Finding**: howler-posts has an explicit precondition that `gray-matter` and `@next/mdx` are listed in `package.json` \u2014 but `package.json` is owned by no Howler. No Howler is tasked with `npm install`-ing these packages. If they are already in the base branch this precondition is vacuously satisfied, but the manifest makes no claim about what's already installed, and the precondition phrasing (\"are listed in `package.json`\") implies they may not be.\n**Risk**: howler-posts imports `gray-matter` / `@next/mdx` at the top of its files, the module isn't installed, TypeScript build fails immediately. The Howler cannot complete.\n**Suggested fix**: Either (a) confirm in the manifest that these packages are already in the base branch and remove the precondition ambiguity, or (b) add `package.json` to the ownership matrix as a MODIFIES for howler-posts (or a pre-drop Gold task), and give howler-posts explicit permission to run `npm install gray-matter @next/mdx`.\n\n---\n\n### 2. `content/posts/*.mdx` owned by no Howler\n**Category**: Ownership Gap\n**Finding**: howler-posts has a hard precondition \u2014 \"MDX content files exist in `content/posts/*.mdx`\" \u2014 but no Howler creates this directory or any sample content, and the ownership matrix lists no files under `content/`.\n**Risk**: `getAllPosts()` returns an empty array, `generateStaticParams` returns no paths, the blog list page renders nothing, and the individual post page can never be reached. howler-posts has no way to verify its own postconditions. It will declare done while delivering a broken feature.\n**Suggested fix**: One of two options \u2014 (a) Gold verifies this directory exists in the base branch before drop and documents it as a pre-existing base asset, or (b) add creation of at least one `content/posts/<sample>.mdx` file to howler-posts's ownership matrix so it can test its own output.\n\n---\n\n### 3. MDX rendering approach is underspecified \u2014 creates a load-bearing seam between howler-posts and howler-about\n**Category**: Contract Ambiguity / Decomposition Flaw\n**Finding**: The contract lists both `@next/mdx` and `gray-matter` as preconditions for howler-posts. These correspond to two distinct MDX approaches:\n- **`@next/mdx` approach**: MDX files are treated as first-class routes; requires `pageExtensions: ['js','jsx','ts','tsx','md','mdx']` in `next.config.js` \u2014 which is exactly what howler-about is tasked with adding.\n- **`next-mdx-remote` / custom approach**: Uses `gray-matter` for frontmatter + a runtime serializer; does NOT require the `pageExtensions` config change.\n\nThe contract doesn't say which approach howler-posts must use. If howler-posts chooses the custom approach, howler-about's `next.config.js` modification becomes unnecessary (harmless but wasted). If howler-posts chooses the `@next/mdx` approach, it depends on howler-about's config change being merged before the blog works \u2014 but that dependency is not modeled in the DAG and howler-posts has no `deps` on howler-about.\n\nMore critically: the `pageExtensions` config change is *logically owned by the Howler that requires it* (howler-posts), but is *physically owned by a Howler that doesn't use it* (howler-about). This is an ownership/logic mismatch that will surface as a confusing merge-time gap.\n**Risk**: howler-posts picks one approach, howler-about configures the other, the two PRs merge and the blog doesn't render MDX at all. Neither Howler will catch this because they test in isolation.\n**Suggested fix**: The contract must specify the MDX rendering strategy. Recommended: use `next-mdx-remote` + `gray-matter` (no config change needed, simpler, avoids the howler-about dependency). Remove the `pageExtensions` instruction from howler-about's conventions section. If `@next/mdx` is required, move the `next.config.js` modification ownership to howler-posts and update the DAG accordingly.\n\n---\n\n### 4. `PageProps` exported from `src/app/layout.tsx` is not a stable export contract\n**Category**: Contract Ambiguity\n**Finding**: The contract defines `PageProps` as living in `src/app/layout.tsx` (re-exported). In Next.js App Router, `layout.tsx` exports a default component (`RootLayout`) and `metadata`. Named type exports from `layout.tsx` are non-standard and not guaranteed to survive framework upgrades or codemods. More critically: howler-posts is told to import `{ PageProps }` from `@/app/layout` \u2014 but `layout.tsx` is a Server Component file that may not expose this import cleanly in all toolchain configurations.\n\nAdditionally, the `PageProps` definition uses the synchronous params API (`params: Record<string, string>`), which is the **Next.js 15 API**. In Next.js 16, all request APIs are async: `params` is `Promise<Record<string, string>>`. If the project targets Next.js 16 (consistent with the rest of the conventions), this type is already wrong and will generate TypeScript errors when howler-posts calls `params.slug` instead of `(await params).slug`.\n**Risk**: howler-posts builds against a stale type definition. TypeScript won't catch the bug at import time; it surfaces at runtime as undefined reads on the params object.\n**Suggested fix**: Move `PageProps` to `src/types/page.ts` (parallel to `src/types/post.ts`, which howler-posts already owns). Add `src/types/page.ts` to howler-layout's ownership matrix. Update the type to the Next.js 16 async signature: `params: Promise<Record<string, string>>; searchParams?: Promise<Record<string, string | string[]>>`. Update the integration table to point to `@/types/page` as the import path.\n\n---\n\n## Warnings (should address)\n\n### W1. No Howler owns global CSS / Tailwind entry point\n**Category**: Ownership Gap\n**Finding**: Tailwind requires a global CSS file with `@tailwind base/components/utilities` directives imported in the root layout. No file matching `src/app/globals.css` or equivalent appears in the ownership matrix. howler-layout creates `layout.tsx` and will need to import a globals file \u2014 if it doesn't exist, the Tailwind build won't apply styles.\n**Suggested fix**: Add `src/app/globals.css` to howler-layout's CREATES list (it's trivial \u2014 3 lines). Document in CONTRACT.md that layout.tsx imports it.\n\n---\n\n### W2. `next.config.js` extension may conflict with existing base\n**Category**: Ownership Gap\n**Finding**: The ownership matrix lists `next.config.js` (`.js`), but the project uses TypeScript throughout, and Next.js 16 conventionally uses `next.config.ts`. If the base branch already has `next.config.ts`, howler-about will create a second `next.config.js` alongside it. Next.js processes only one \u2014 the behavior is version-dependent and can silently drop configuration.\n**Suggested fix**: Before drop, Gold verifies whether the base branch has `next.config.js` or `next.config.ts` and updates the ownership matrix to match the actual filename.\n\n---\n\n### W3. howler-about's `Post` import dependency is unmodeled\n**Category**: Decomposition Flaw\n**Finding**: The integration table notes \"howler-about *may* import `Post` for structured data.\" If howler-about implements JSON-LD structured data for the About page, it might use `Post` from `src/types/post.ts` (owned by howler-posts). The contract uses \"may\" \u2014 this is non-deterministic. If howler-about does import `Post`, and howler-posts finalizes the type after howler-about has already written code assuming a certain shape, there's a seam risk.\n**Suggested fix**: Remove the \"may import Post\" from the integration table. The About page has no posts to reference \u2014 if structured data is needed, it should be a plain `WebPage` or `Person` schema that howler-about defines inline. This eliminates the dependency entirely.\n\n---\n\n## Accepted (no action needed)\n\n**howler-posts `#types` checkpoint dep on howler-layout**: The DAG models this correctly. `PageProps` (once fixed per Blocker 4) will be a stable type before howler-posts begins. The dependency is real and correctly scoped.\n\n**3-Howler decomposition**: The file boundaries are genuinely clean. There's no shared source file between any two Howlers (ownership conflict-free as stated). The decomposition is sound once the cross-cutting issues above are resolved.\n\n**howler-about modifying `next.config.js` for non-MDX concerns**: The precondition/postcondition model for howler-about is appropriately lightweight (conventions-only). This is the right call for a pure-create Howler with a single config modification.\n\n**Hard-coded nav links in layout**: The invariant \"navigation links are hardcoded (no dynamic route discovery)\" is correct and safe for a blog of this size. Not a shortcut \u2014 it's the right call.\n\n---\n\n## Verdict\n\n**BLOCKED** \u2014 4 blocker(s) must be resolved before drop.\n\nCritical path: Blocker 3 (MDX approach) is the highest-risk item because it creates a hidden cross-Howler dependency that the DAG doesn't model. Blocker 4 (PageProps) is a baked-in type error that will cause runtime failures. Blockers 1 and 2 are precondition gaps that will cause howler-posts to fail at startup.",
+  "parsed": {
+    "blockers": [
+      {
+        "title": "1. `package.json` absent from ownership matrix",
+        "category": "ownership_gap",
+        "finding_text": "howler-posts has an explicit precondition that `gray-matter` and `@next/mdx` are listed in `package.json` \u2014 but `package.json` is owned by no Howler. No Howler is tasked with `npm install`-ing these packages. If they are already in the base branch this precondition is vacuously satisfied, but the manifest makes no claim about what's already installed, and the precondition phrasing (\"are listed in `package.json`\") implies they may not be.",
+        "suggested_fix": "Either (a) confirm in the manifest that these packages are already in the base branch and remove the precondition ambiguity, or (b) add `package.json` to the ownership matrix as a MODIFIES for howler-posts (or a pre-drop Gold task), and give howler-posts explicit permission to run `npm install gray-matter @next/mdx`.\n\n---"
+      },
+      {
+        "title": "2. `content/posts/*.mdx` owned by no Howler",
+        "category": "ownership_gap",
+        "finding_text": "howler-posts has a hard precondition \u2014 \"MDX content files exist in `content/posts/*.mdx`\" \u2014 but no Howler creates this directory or any sample content, and the ownership matrix lists no files under `content/`.",
+        "suggested_fix": "One of two options \u2014 (a) Gold verifies this directory exists in the base branch before drop and documents it as a pre-existing base asset, or (b) add creation of at least one `content/posts/<sample>.mdx` file to howler-posts's ownership matrix so it can test its own output.\n\n---"
+      },
+      {
+        "title": "3. MDX rendering approach is underspecified \u2014 creates a load-bearing seam between howler-posts and howler-about",
+        "category": "contract_ambiguity",
+        "finding_text": "The contract lists both `@next/mdx` and `gray-matter` as preconditions for howler-posts. These correspond to two distinct MDX approaches:\n-",
+        "suggested_fix": "The contract must specify the MDX rendering strategy. Recommended: use `next-mdx-remote` + `gray-matter` (no config change needed, simpler, avoids the howler-about dependency). Remove the `pageExtensions` instruction from howler-about's conventions section. If `@next/mdx` is required, move the `next.config.js` modification ownership to howler-posts and update the DAG accordingly.\n\n---"
+      },
+      {
+        "title": "4. `PageProps` exported from `src/app/layout.tsx` is not a stable export contract",
+        "category": "contract_ambiguity",
+        "finding_text": "The contract defines `PageProps` as living in `src/app/layout.tsx` (re-exported). In Next.js App Router, `layout.tsx` exports a default component (`RootLayout`) and `metadata`. Named type exports from `layout.tsx` are non-standard and not guaranteed to survive framework upgrades or codemods. More critically: howler-posts is told to import `{ PageProps }` from `@/app/layout` \u2014 but `layout.tsx` is a Server Component file that may not expose this import cleanly in all toolchain configurations.\n\nAdditionally, the `PageProps` definition uses the synchronous params API (`params: Record<string, string>`), which is the",
+        "suggested_fix": "Move `PageProps` to `src/types/page.ts` (parallel to `src/types/post.ts`, which howler-posts already owns). Add `src/types/page.ts` to howler-layout's ownership matrix. Update the type to the Next.js 16 async signature: `params: Promise<Record<string, string>>; searchParams?: Promise<Record<string, string | string[]>>`. Update the integration table to point to `@/types/page` as the import path.\n\n---"
+      }
+    ],
+    "warnings": [
+      {
+        "title": "W1. No Howler owns global CSS / Tailwind entry point",
+        "category": "ownership_gap",
+        "finding_text": "Tailwind requires a global CSS file with `@tailwind base/components/utilities` directives imported in the root layout. No file matching `src/app/globals.css` or equivalent appears in the ownership matrix. howler-layout creates `layout.tsx` and will need to import a globals file \u2014 if it doesn't exist, the Tailwind build won't apply styles.",
+        "suggested_fix": "Add `src/app/globals.css` to howler-layout's CREATES list (it's trivial \u2014 3 lines). Document in CONTRACT.md that layout.tsx imports it.\n\n---"
+      },
+      {
+        "title": "W2. `next.config.js` extension may conflict with existing base",
+        "category": "ownership_gap",
+        "finding_text": "The ownership matrix lists `next.config.js` (`.js`), but the project uses TypeScript throughout, and Next.js 16 conventionally uses `next.config.ts`. If the base branch already has `next.config.ts`, howler-about will create a second `next.config.js` alongside it. Next.js processes only one \u2014 the behavior is version-dependent and can silently drop configuration.",
+        "suggested_fix": "Before drop, Gold verifies whether the base branch has `next.config.js` or `next.config.ts` and updates the ownership matrix to match the actual filename.\n\n---"
+      },
+      {
+        "title": "W3. howler-about's `Post` import dependency is unmodeled",
+        "category": "decomposition_flaw",
+        "finding_text": "The integration table notes \"howler-about *may* import `Post` for structured data.\" If howler-about implements JSON-LD structured data for the About page, it might use `Post` from `src/types/post.ts` (owned by howler-posts). The contract uses \"may\" \u2014 this is non-deterministic. If howler-about does import `Post`, and howler-posts finalizes the type after howler-about has already written code assuming a certain shape, there's a seam risk.",
+        "suggested_fix": "Remove the \"may import Post\" from the integration table. The About page has no posts to reference \u2014 if structured data is needed, it should be a plain `WebPage` or `Person` schema that howler-about defines inline. This eliminates the dependency entirely.\n\n---"
+      }
+    ],
+    "verdict": "BLOCKED",
+    "accepted": [
+      "howler-posts `#types` checkpoint dep on howler-layout**: The DAG models this correctly. `PageProps` (once fixed per Blocker 4) will be a stable type before howler-posts begins. The dependency is real and correctly scoped.",
+      "Howler decomposition**: The file boundaries are genuinely clean. There's no shared source file between any two Howlers (ownership conflict-free as stated). The decomposition is sound once the cross-cutting issues above are resolved.",
+      "howler-about modifying `next.config.js` for non-MDX concerns**: The precondition/postcondition model for howler-about is appropriately lightweight (conventions-only). This is the right call for a pure-create Howler with a single config modification.",
+      "Hard-coded nav links in layout**: The invariant \"navigation links are hardcoded (no dynamic route discovery)\" is correct and safe for a blog of this size. Not a shortcut \u2014 it's the right call."
+    ]
+  },
+  "parse_confidence": 1.0,
+  "scores": {
+    "detection_rate": 1.0,
+    "severity_accuracy": 0.6667,
+    "fp_rate": 0.0,
+    "scenario_score": 0.9,
+    "bug_scores": {
+      "bug-01": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": true
+      },
+      "bug-02": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": false
+      },
+      "bug-03": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": false
+      }
+    }
+  },
+  "tokens_used": {
+    "input": 2223,
+    "output": 2293
+  },
+  "latency_ms": 109862,
+  "cost_usd": 0.041064,
+  "timestamp": "2026-04-01T00:14:39.042055+00:00"
+}

@@ -1,0 +1,148 @@
+scenario_id: "politico-05"
+difficulty: "medium"
+domain: "React component library"
+description: >
+  5-Howler Storybook + React component library. howler-tokens defines design tokens,
+  howler-primitives/layout/feedback build components in parallel, howler-stories is
+  sequential. Three planted bugs: src/index.ts barrel export file unclaimed, ComponentProps
+  className optionality ambiguity, and howler-tokens parallel to component Howlers despite
+  components importing token values at build time.
+
+planted_bugs:
+  - bug_id: "bug-01"
+    category: "ownership_gap"
+    severity: "blocker"
+    location: "MANIFEST.md file ownership matrix and CONTRACT.md naming conventions"
+    description: >
+      The CONTRACT.md naming conventions section states "all public components exported
+      from src/index.ts (barrel export)" but src/index.ts does not appear in the
+      ownership matrix. This barrel file must aggregate exports from all three component
+      Howlers (primitives, layout, feedback) — it is the public API surface of the
+      library. Without an owner, each Howler might create their own src/index.ts
+      (causing three-way conflicts) or none of them will (leaving the library with no
+      public entry point). howler-stories imports components from @/components/* (not from
+      src/index.ts directly), but library consumers will use the barrel export.
+    expected_finding: |
+      Politico should flag that src/index.ts (the barrel export file) is specified as
+      the public API in CONTRACT.md's naming conventions but absent from the ownership
+      matrix. Three Howlers (primitives, layout, feedback) all add components that need
+      to be exported from it. No single Howler can own the full barrel file because it
+      must aggregate from all three. This requires either a fourth integration Howler,
+      a fragment+stitch pattern (each Howler writes a partial export list that gets
+      merged), or making the barrel file sequential after all three component Howlers
+      complete.
+    scoring:
+      full_credit_if: >
+        Names src/index.ts specifically AND notes it is referenced in the contract
+        but unclaimed AND explains why no single component Howler can own it (it
+        aggregates from all three) AND suggests a resolution (integration Howler,
+        fragment+stitch, or sequential)
+      partial_credit_if: >
+        Names the barrel export file as unclaimed without explaining the multi-Howler
+        aggregation problem or suggesting a concrete resolution
+      no_credit_if: >
+        Accepts the ownership matrix as complete, or only mentions the barrel file
+        in an Accepted/Observation section without flagging it as a blocker
+
+  - bug_id: "bug-02"
+    category: "contract_ambiguity"
+    severity: "warning"
+    location: "CONTRACT.md — ComponentProps.className field"
+    description: >
+      ComponentProps defines `className?: string` (optional). All component *Props
+      interfaces "extend ComponentProps" per the contract. The ambiguity: a component
+      author extending ComponentProps could choose to make className required in their
+      specific Props interface (e.g., `className: string` in ButtonProps, overriding
+      the optional base). The contract says "all *Props interfaces extend ComponentProps"
+      but doesn't specify whether className must remain optional in all concrete Props
+      or whether it can be narrowed to required. If howler-primitives makes className
+      required on Button (a common pattern for utility-first CSS), but howler-feedback
+      keeps it optional on Toast, howler-stories will have inconsistent story controls
+      — some components require className in args, others don't. More critically,
+      a consumer code pattern like `<Button />` (no className) will fail TypeScript
+      for Button but pass for Toast.
+    expected_finding: |
+      Politico should flag that ComponentProps.className is optional but the contract
+      does not specify whether concrete component Props can override this to required.
+      howler-primitives (utility-first CSS heavy) and howler-feedback (status-based
+      styling) may make different choices — ButtonProps might require className while
+      ToastProps keeps it optional. The contract should explicitly state: "className
+      must remain optional in all concrete Props interfaces — never narrowed to required."
+    scoring:
+      full_credit_if: >
+        Identifies that className optionality could be overridden by concrete Props
+        AND names at least two Howlers that might make different choices AND explains
+        the TypeScript impact (component with required className breaks <Button />
+        call sites)
+      partial_credit_if: >
+        Notes that className handling is underspecified without tracing the specific
+        incompatibility between Howlers or the TypeScript impact
+      no_credit_if: >
+        Accepts ComponentProps as adequate, treating optional className as self-explanatory
+        convention that Howlers will follow consistently
+
+  - bug_id: "bug-03"
+    category: "decomposition_flaw"
+    severity: "blocker"
+    location: "MANIFEST.md DAG — howler-tokens parallel to component Howlers"
+    description: >
+      The DAG shows howler-tokens with no deps, and all three component Howlers
+      (howler-primitives, howler-layout, howler-feedback) also with no deps — all four
+      run in parallel. The CONTRACT.md states that component Howlers use CSS custom
+      properties "via class names" and "No component imports from src/tokens/ directly."
+      This sounds like the parallel execution is safe. However, howler-tokens'
+      postconditions state that src/tokens/index.ts "injects CSS custom properties as
+      a side effect when imported in the app root." This side-effect injection must
+      happen for token CSS variables to be available. During Storybook development
+      (owned by howler-stories), the tokens must be imported in the Storybook preview
+      config — but more critically, during the component Howlers' OWN development and
+      testing, they reference CSS custom properties like `--token-color-blue-500` that
+      won't resolve until howler-tokens' output exists. Component Howlers can write
+      code that references these CSS vars, but they cannot verify their visual output
+      or run visual regression tests until howler-tokens is complete. This creates a
+      hidden soft dependency: parallel execution is possible for code writing, but
+      integration verification requires howler-tokens to complete first.
+    expected_finding: |
+      Politico should flag that howler-primitives, howler-layout, and howler-feedback
+      reference CSS custom properties (--token-color-*, --token-spacing-*) defined by
+      howler-tokens, but all four are parallel with no dependency edges. Component
+      Howlers can write code in isolation but cannot render or visually verify components
+      until howler-tokens exists. If component Howlers run local dev servers or Storybook
+      previews during implementation, the CSS custom properties will be undefined
+      (rendering unstyled components). The DAG should show component Howlers depending
+      on howler-tokens#types (or a CSS checkpoint), not just sharing the same base_commit.
+    scoring:
+      full_credit_if: >
+        Identifies that component Howlers consume CSS custom properties from howler-tokens
+        AND notes that parallel execution means components cannot be verified visually
+        during implementation AND recommends a dependency edge from component Howlers
+        to howler-tokens
+      partial_credit_if: >
+        Notes a dependency between tokens and components without explaining the specific
+        verification failure during parallel execution
+      no_credit_if: >
+        Accepts the parallel decomposition because the contract says components use CSS
+        vars "via class names, not JS imports," missing the runtime dependency on the
+        CSS custom property definitions existing in the DOM
+
+clean_elements:
+  - element_id: "clean-01"
+    location: "MANIFEST.md — howler-stories story files"
+    description: >
+      Each story file (Button.stories.tsx, Stack.stories.tsx, etc.) is correctly listed
+      in the ownership matrix under howler-stories. This is clean: stories are separate
+      files, one Howler owns all of them, and there is no cross-Howler write conflict.
+      The sequential dependency on all four component Howlers is correctly modeled in
+      the DAG. This could look overly constrained (why not let component Howlers write
+      their own stories?) but the manifest rationale correctly identifies that stories
+      for all components are best written together for visual consistency.
+    expected_handling: >
+      Politico should accept the stories ownership and sequential dependency as correct,
+      or not mention it. The decomposition rationale in the manifest explains the choice.
+    false_positive_if: >
+      Politico flags the sequential stories Howler as over-constrained, or says each
+      component Howler should own its own stories files, or calls the full-completion
+      dependency on all four Howlers excessive
+
+false_positive_threshold: 0.20
+pass_threshold: 0.85

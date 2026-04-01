@@ -1,0 +1,139 @@
+scenario_id: "politico-04"
+difficulty: "medium"
+domain: "data pipeline"
+description: >
+  5-Howler Python ETL pipeline: extract from S3, validate, transform, load to PostgreSQL.
+  Three planted bugs: Alembic migration file missing from ownership matrix (needed by both
+  howler-schema and howler-load), ValidatedRecord.metadata typed as 'object' is too loose,
+  and howler-validate and howler-transform are parallel but transform consumes validate's
+  output format.
+
+planted_bugs:
+  - bug_id: "bug-01"
+    category: "ownership_gap"
+    severity: "blocker"
+    location: "MANIFEST.md file ownership matrix"
+    description: >
+      The Alembic migration file is referenced in howler-schema's postconditions as
+      "Migration file follows naming convention: {revision}_initial_pipeline_schema.py"
+      but only a generic placeholder name is given — no specific file path appears in
+      the ownership matrix. Alembic migrations live in a migrations/ or alembic/versions/
+      directory. howler-schema creates the migration, but howler-load's preconditions
+      require the database table to exist before loading. The migration must be RUN
+      before howler-load can function — but no Howler owns the migration execution step
+      (alembic upgrade head). More concretely: the alembic.ini and alembic/env.py files
+      that configure the migration runner are also absent from the ownership matrix.
+      Without alembic.ini, the migration cannot be executed by any Howler or CI system.
+    expected_finding: |
+      Politico should flag that the Alembic configuration files (alembic.ini, alembic/env.py)
+      and the migration execution step are absent from the ownership matrix. howler-schema
+      creates the migration SQL/Python file but the alembic runner configuration is unclaimed.
+      howler-load's preconditions state the database table must exist, but no Howler runs
+      "alembic upgrade head" — this gap means the database will not be set up before loading
+      begins unless someone runs the migration manually.
+    scoring:
+      full_credit_if: >
+        Names alembic.ini or alembic/env.py as unclaimed AND/OR identifies that migration
+        execution (alembic upgrade head) is not owned by any Howler AND connects this
+        to howler-load's precondition that the database table exists
+      partial_credit_if: >
+        Notes that migration execution is unaccounted for without naming the specific
+        configuration files or the howler-load precondition dependency
+      no_credit_if: >
+        Accepts the migration ownership as complete because howler-schema creates the
+        migration file, missing that execution is separate from creation
+
+  - bug_id: "bug-02"
+    category: "contract_ambiguity"
+    severity: "warning"
+    location: "CONTRACT.md — ValidatedRecord.metadata field type"
+    description: >
+      ValidatedRecord.metadata is typed as `object` in the Pydantic model definition.
+      In Python, `object` is the base type of all objects and effectively means "anything."
+      Pydantic will not validate or serialize this field in a useful way — it passes
+      through whatever Python object is given. howler-validate will populate this field
+      with non-standard raw data, howler-transform will read it expecting a certain structure
+      to compute derived fields or pass through to NormalizedRecord.metadata. But
+      NormalizedRecord.metadata is typed as `dict[str, str]` — all string values.
+      The transform stage must convert ValidatedRecord.metadata (object) to NormalizedRecord.metadata
+      (dict[str, str]), but the contract doesn't specify what structure the object will have.
+      howler-transform's derived.py cannot reliably coerce an arbitrary Python object to
+      dict[str, str] without knowing the expected shape.
+    expected_finding: |
+      Politico should flag that ValidatedRecord.metadata typed as `object` is too loose
+      for reliable cross-Howler use. howler-transform must convert it to NormalizedRecord.metadata
+      (dict[str, str]) but cannot do so without knowing the expected structure. The contract
+      should specify ValidatedRecord.metadata as dict[str, Any] or dict[str, str | int | float]
+      with a defined set of expected keys, enabling howler-transform to write reliable coercion
+      logic.
+    scoring:
+      full_credit_if: >
+        Names ValidatedRecord.metadata as `object` being the ambiguity AND traces the
+        downstream impact to howler-transform's inability to coerce to NormalizedRecord.metadata
+        AND suggests a concrete type replacement
+      partial_credit_if: >
+        Notes that ValidatedRecord.metadata is too loosely typed without tracing the
+        specific cross-Howler coercion problem or suggesting a fix
+      no_credit_if: >
+        Accepts `object` as a valid Pydantic field type, or flags it only as a style
+        issue without connecting it to the transform-stage dependency
+
+  - bug_id: "bug-03"
+    category: "decomposition_flaw"
+    severity: "blocker"
+    location: "MANIFEST.md DAG — howler-validate and howler-transform parallel"
+    description: >
+      howler-validate and howler-transform are both marked as having only howler-schema#types
+      as a dependency — they are parallel to each other. However, the pipeline data flow is:
+      extract → validate → transform → load. howler-transform's runner.py `run()` function
+      takes `list[ValidatedRecord]` as input. howler-validate's runner.py `run()` function
+      produces `list[ValidatedRecord]` as output. The transform stage consumes the validate
+      stage's output FORMAT. While both Howlers depend on the same schema types, howler-transform
+      cannot be integration-tested without howler-validate's runner existing — transform's
+      runner.run() needs to be called with actual ValidatedRecords, and the contract states
+      "Records with non-empty validation_errors are logged and excluded from transform output."
+      This means transform's filtering logic depends on the `validation_errors` field semantics
+      established by howler-validate. If howler-validate and howler-transform are written in
+      parallel, they may make incompatible assumptions about what a "soft-failed" record looks
+      like.
+    expected_finding: |
+      Politico should flag that howler-transform is parallel to howler-validate but consumes
+      howler-validate's output format (list[ValidatedRecord]) and must implement filtering logic
+      based on validation_errors semantics. The DAG shows both depending only on howler-schema#types,
+      but howler-transform's postconditions state "Records with non-empty validation_errors are
+      logged and excluded from transform output" — this is a behavioral dependency on howler-validate's
+      output conventions, not just the schema type. howler-transform should depend on howler-validate
+      (full completion or at least a behavioral checkpoint) to ensure the validation_errors semantics
+      are stable before transform filtering logic is written.
+    scoring:
+      full_credit_if: >
+        Names howler-validate and howler-transform as the parallel pair AND identifies that
+        transform's filtering logic (validation_errors exclusion) depends on validate's
+        output semantics AND recommends adding a dependency from transform to validate
+      partial_credit_if: >
+        Notes a data flow dependency between validate and transform without specifically
+        naming the validation_errors filtering concern
+      no_credit_if: >
+        Accepts the parallel decomposition as correct because both Howlers share the same
+        schema types, missing the behavioral (not just structural) dependency
+
+clean_elements:
+  - element_id: "clean-01"
+    location: "MANIFEST.md — config/pipeline.yaml owned by howler-extract"
+    description: >
+      config/pipeline.yaml is owned by howler-extract and defines global pipeline
+      configuration (S3 bucket, page size, etc.). Other Howlers don't read this file
+      directly — they receive configuration through function parameters from the pipeline
+      orchestrator (which is out of scope). This could look like a shared config problem
+      (why does only extract own the global config?) but it is correctly scoped: the
+      extract stage is the entry point that reads config and passes parameters downstream.
+      The integration points table correctly notes "orchestrator is out of scope."
+    expected_handling: >
+      Politico should accept config/pipeline.yaml ownership as correctly assigned to
+      howler-extract, or not mention it. The orchestrator boundary is explicitly documented.
+    false_positive_if: >
+      Politico flags config/pipeline.yaml as a shared ownership problem, or says other
+      Howlers should also own or read the config file directly
+
+false_positive_threshold: 0.20
+pass_threshold: 0.85

@@ -1,0 +1,105 @@
+{
+  "scenario_id": "scenario-04",
+  "model": "sonnet",
+  "model_id": "claude-sonnet-4-6-20250320",
+  "raw_output": "# Politico Review\n_Rain ID: etl-pipeline-0331 | Reviewed: 2026-03-31_\n\n---\n\n## Blockers (must address before drop)\n\n### 1. `requirements.txt` not owned by any Howler\n**Category**: Ownership Gap\n**Finding**: Five Howler preconditions explicitly require packages in `requirements.txt` (`pydantic`, `sqlalchemy`, `alembic`, `boto3`). The file does not appear in the ownership matrix. No Howler owns it.\n**Risk**: If `requirements.txt` doesn't exist or is missing packages, every Howler that tries to run its test suite fails at the import step. This is a silent, environment-level failure that wastes the entire run.\n**Suggested fix**: Add `requirements.txt` to the ownership matrix as a CREATES for howler-schema (it's the first Howler and depends on the most packages). All other Howlers should declare it as a READ dependency and note any additional packages they need in their task descriptions so howler-schema includes them upfront.\n\n---\n\n### 2. `__init__.py` files absent from ownership matrix\n**Category**: Ownership Gap\n**Finding**: The module layout requires Python package init files in: `etl/`, `etl/extract/`, `etl/models/`, `etl/validate/`, `etl/transform/`, `etl/load/`. None appear in the matrix.\n**Risk**: Each Howler works in an isolated worktree. If howler-validate doesn't create `etl/__init__.py` and `etl/validate/__init__.py`, its own imports fail. Worse: if multiple Howlers independently create `etl/__init__.py`, there's a merge conflict on a trivially empty file \u2014 a pointless blocker in Phase 3.\n**Suggested fix**: Assign all `__init__.py` creation to a single Howler (howler-schema is the natural choice since it runs first). List them explicitly: `etl/__init__.py`, `etl/models/__init__.py`, `etl/extract/__init__.py`, `etl/validate/__init__.py`, `etl/transform/__init__.py`, `etl/load/__init__.py`. All owned by howler-schema, CREATES.\n\n---\n\n### 3. Alembic setup files not owned\n**Category**: Ownership Gap\n**Finding**: howler-schema is contracted to write an Alembic migration. But `alembic init` must run first to create `alembic.ini` and `alembic/env.py`. These are not in the ownership matrix and are not preconditions for howler-schema. They don't exist on `main` (no prior migration history is mentioned).\n**Risk**: `alembic revision --autogenerate` fails if `alembic.ini` doesn't exist. howler-schema will either run `alembic init` (creating files not in the matrix) or hard-fail. Either way, the postcondition \"Migration file follows naming convention...\" cannot be met.\n**Suggested fix**: Add to howler-schema's ownership: `alembic.ini` (CREATES), `alembic/env.py` (CREATES), `alembic/versions/.gitkeep` (CREATES). Update howler-schema's preconditions to include the `alembic init` step.\n\n---\n\n### 4. `NormalizedRecord.id` derivation is undefined \u2014 upsert is broken\n**Category**: Contract Ambiguity\n**Finding**: CONTRACT.md specifies `id: str  # UUID, generated during transform`. howler-load's conflict handler is contracted to do upsert-by-`id`. But the contract says nothing about *how* the UUID is generated.\n**Risk**: If howler-transform calls `str(uuid.uuid4())`, every pipeline re-run generates a new UUID for the same source record. The upsert becomes an unconditional insert, silently duplicating data on every re-run. The conflict handler is useless.\n**Suggested fix**: Add to howler-transform's invariants: `id` MUST be a deterministic UUID derived from `source_id` (e.g., `uuid.uuid5(NAMESPACE_DNS, source_id)`). Add this derivation formula to the CONTRACT.md NormalizedRecord definition so howler-load knows what key stability to rely on.\n\n---\n\n### 5. `ValidatedRecord.metadata: object` is type-incompatible with `NormalizedRecord.metadata: dict[str, str]`\n**Category**: Contract Ambiguity\n**Finding**: howler-validate populates `ValidatedRecord.metadata` typed as `object` (effectively `Any`). howler-transform must output `NormalizedRecord.metadata: dict[str, str]`. The contract says \"All metadata values coerced to str before output\" but gives no guidance on the *structure* of what howler-validate puts in metadata.\n**Risk**: howler-validate could store `{\"key\": [1, 2, 3]}` or `{\"nested\": {\"a\": 1}}` \u2014 valid for `object`, impossible to coerce to `dict[str, str]` without arbitrary decisions. Two Howlers implementing independently will produce incompatible types at this seam. howler-transform will need to make undocumented assumptions about what it receives.\n**Suggested fix**: Change `ValidatedRecord.metadata` from `object` to `dict[str, Any]`. Add an invariant to howler-validate: metadata values must be scalar (str, int, float, bool, None) \u2014 no nested structures. Add a coercion rule to howler-transform specifying how each scalar type maps to str (e.g., booleans \u2192 `\"true\"`/`\"false\"`, None \u2192 `\"\"`).\n\n---\n\n## Warnings (should address)\n\n### W1. Currency \"conversion\" in `compute_amount_cents` is ambiguous\n**Category**: Contract Ambiguity\n**Finding**: The NormalizedRecord comment says \"Always in cents; currency conversion applied during transform.\" `compute_amount_cents(amount: float, currency: str) -> int` could mean (a) multiply by 100 to get cents, or (b) convert from foreign currency to a base currency, then to cents. If (b), there's no exchange rate source defined anywhere.\n**Risk**: howler-transform either implements the wrong thing or invents an exchange rate mechanism not sanctioned by the contract.\n**Suggested fix**: Clarify the comment. If it means only cent-conversion (most likely), say \"Converts decimal amount to integer cents (e.g., 10.50 \u2192 1050). No currency exchange applied.\" If FX conversion is intended, add a `config/pipeline.yaml` key for `base_currency` and specify the exchange rate source (static config, external API, etc.).\n\n---\n\n### W2. Test files not in the ownership matrix\n**Category**: Ownership Gap\n**Finding**: Naming conventions say \"one test file per stage\" (`tests/test_validate.py`, etc.) but no test files appear in the matrix.\n**Risk**: Gray runs after each Howler's PR. If Howlers don't write tests, Gray has nothing to run and will flag coverage gaps for every stage. This is recoverable but adds Phase 3 overhead to every single PR.\n**Suggested fix**: Add test files to the matrix explicitly. Each Howler owns its own test file: `tests/test_extract.py` (howler-extract), `tests/test_schema.py` (howler-schema), `tests/test_validate.py` (howler-validate), `tests/test_transform.py` (howler-transform), `tests/test_load.py` (howler-load).\n\n---\n\n### W3. `write_audit_log` error count is semantically ambiguous\n**Category**: Contract Ambiguity\n**Finding**: `write_audit_log(pipeline_run_id: str, inserted: int, errors: int)`. howler-load only receives `list[NormalizedRecord]` \u2014 records that already passed validation and transform. Validation errors were filtered by howler-transform. howler-load cannot count validation failures.\n**Risk**: `errors` silently means only insert failures, but callers (or future ops engineers reading the audit log) may expect it to include validation failures. The audit log is misleading by omission.\n**Suggested fix**: Either (a) rename the parameter to `insert_errors` to make scope explicit, or (b) extend the signature to accept `validation_errors: int` passed in from upstream, and document where the caller sources that count.\n\n---\n\n### W4. `pipeline_run_id` origin is undefined\n**Category**: Contract Ambiguity\n**Finding**: `pipeline_run_id` appears in `NormalizedRecord`, `transform.runner.run(..., pipeline_run_id: str)`, and `audit.write_audit_log(pipeline_run_id, ...)`. The orchestrator is \"out of scope.\" Nothing in the contract specifies who generates it or what format it should be.\n**Risk**: howler-transform generates it one way (e.g., `str(uuid4())`), howler-load expects it passed in. In tests, both Howlers will invent test values independently and this won't surface as a problem until integration. But if a future pipeline runner generates it differently, the contract gives no guidance.\n**Suggested fix**: Add to CONTRACT.md Naming Conventions: \"`pipeline_run_id` is a UUID string generated once per pipeline invocation. In tests, use a fixed sentinel value (e.g., `'test-run-001'`). In production, the orchestrator generates it at startup.\"\n\n---\n\n## Accepted (no action needed)\n\n**All 5 tasks marked `serial_risk: no`**: This is correct in the Spectrum sense. \"Serial risk\" refers to code implementation ordering, not runtime data flow. extract, validate, and transform can be coded independently against schema types. The runtime pipeline is sequential but the Howlers implement independent logic.\n\n**howler-load depending on howler-transform full completion**: Conservative but correct. While howler-load only needs `NormalizedRecord` (available at schema #types), taking a full dependency on howler-transform ensures the output format won't shift under howler-load during implementation. Safe call.\n\n**No pipeline orchestrator Howler**: The contract explicitly scopes this out. Acceptable for a first-pass ETL implementation. The stages can be unit tested independently without a runner. This should be noted as a follow-up item but it's not a spectrum blocker.\n\n**`ValidatedRecord.validation_errors` passthrough semantics**: howler-validate passes all records through (invariant: output length == input length), howler-transform filters on non-empty `validation_errors`. This is an intentional design decision (soft-fail at validate, hard-filter at transform). The two contracts are consistent with each other.\n\n**DAG structure**: howler-schema as the sole root with all others depending on `#types` is correct. The checkpoint unblock pattern is well-suited here since all downstream Howlers need types but not implementation.\n\n---\n\n## Verdict\n\n**BLOCKED \u2014 5 blockers must be resolved before drop.**\n\nThe ownership gaps (1, 2, 3) are mechanical and fast to fix \u2014 add the files to the matrix. The contract ambiguities (4, 5) are higher-risk because they involve seam behavior that two Howlers will implement independently. If 4 and 5 aren't fixed, howler-load's upsert is silently wrong and the validate\u2192transform metadata seam will cause a type error at integration.",
+  "parsed": {
+    "blockers": [
+      {
+        "title": "1. `requirements.txt` not owned by any Howler",
+        "category": "ownership_gap",
+        "finding_text": "Five Howler preconditions explicitly require packages in `requirements.txt` (`pydantic`, `sqlalchemy`, `alembic`, `boto3`). The file does not appear in the ownership matrix. No Howler owns it.",
+        "suggested_fix": "Add `requirements.txt` to the ownership matrix as a CREATES for howler-schema (it's the first Howler and depends on the most packages). All other Howlers should declare it as a READ dependency and note any additional packages they need in their task descriptions so howler-schema includes them upfront.\n\n---"
+      },
+      {
+        "title": "2. `__init__.py` files absent from ownership matrix",
+        "category": "ownership_gap",
+        "finding_text": "The module layout requires Python package init files in: `etl/`, `etl/extract/`, `etl/models/`, `etl/validate/`, `etl/transform/`, `etl/load/`. None appear in the matrix.",
+        "suggested_fix": "Assign all `__init__.py` creation to a single Howler (howler-schema is the natural choice since it runs first). List them explicitly: `etl/__init__.py`, `etl/models/__init__.py`, `etl/extract/__init__.py`, `etl/validate/__init__.py`, `etl/transform/__init__.py`, `etl/load/__init__.py`. All owned by howler-schema, CREATES.\n\n---"
+      },
+      {
+        "title": "3. Alembic setup files not owned",
+        "category": "ownership_gap",
+        "finding_text": "howler-schema is contracted to write an Alembic migration. But `alembic init` must run first to create `alembic.ini` and `alembic/env.py`. These are not in the ownership matrix and are not preconditions for howler-schema. They don't exist on `main` (no prior migration history is mentioned).",
+        "suggested_fix": "Add to howler-schema's ownership: `alembic.ini` (CREATES), `alembic/env.py` (CREATES), `alembic/versions/.gitkeep` (CREATES). Update howler-schema's preconditions to include the `alembic init` step.\n\n---"
+      },
+      {
+        "title": "4. `NormalizedRecord.id` derivation is undefined \u2014 upsert is broken",
+        "category": "contract_ambiguity",
+        "finding_text": "CONTRACT.md specifies `id: str  # UUID, generated during transform`. howler-load's conflict handler is contracted to do upsert-by-`id`. But the contract says nothing about *how* the UUID is generated.",
+        "suggested_fix": "Add to howler-transform's invariants: `id` MUST be a deterministic UUID derived from `source_id` (e.g., `uuid.uuid5(NAMESPACE_DNS, source_id)`). Add this derivation formula to the CONTRACT.md NormalizedRecord definition so howler-load knows what key stability to rely on.\n\n---"
+      },
+      {
+        "title": "5. `ValidatedRecord.metadata: object` is type-incompatible with `NormalizedRecord.metadata: dict[str, str]`",
+        "category": "contract_ambiguity",
+        "finding_text": "howler-validate populates `ValidatedRecord.metadata` typed as `object` (effectively `Any`). howler-transform must output `NormalizedRecord.metadata: dict[str, str]`. The contract says \"All metadata values coerced to str before output\" but gives no guidance on the *structure* of what howler-validate puts in metadata.",
+        "suggested_fix": "Change `ValidatedRecord.metadata` from `object` to `dict[str, Any]`. Add an invariant to howler-validate: metadata values must be scalar (str, int, float, bool, None) \u2014 no nested structures. Add a coercion rule to howler-transform specifying how each scalar type maps to str (e.g., booleans \u2192 `\"true\"`/`\"false\"`, None \u2192 `\"\"`).\n\n---"
+      }
+    ],
+    "warnings": [
+      {
+        "title": "W1. Currency \"conversion\" in `compute_amount_cents` is ambiguous",
+        "category": "contract_ambiguity",
+        "finding_text": "The NormalizedRecord comment says \"Always in cents; currency conversion applied during transform.\" `compute_amount_cents(amount: float, currency: str) -> int` could mean (a) multiply by 100 to get cents, or (b) convert from foreign currency to a base currency, then to cents. If (b), there's no exchange rate source defined anywhere.",
+        "suggested_fix": "Clarify the comment. If it means only cent-conversion (most likely), say \"Converts decimal amount to integer cents (e.g., 10.50 \u2192 1050). No currency exchange applied.\" If FX conversion is intended, add a `config/pipeline.yaml` key for `base_currency` and specify the exchange rate source (static config, external API, etc.).\n\n---"
+      },
+      {
+        "title": "W2. Test files not in the ownership matrix",
+        "category": "ownership_gap",
+        "finding_text": "Naming conventions say \"one test file per stage\" (`tests/test_validate.py`, etc.) but no test files appear in the matrix.",
+        "suggested_fix": "Add test files to the matrix explicitly. Each Howler owns its own test file: `tests/test_extract.py` (howler-extract), `tests/test_schema.py` (howler-schema), `tests/test_validate.py` (howler-validate), `tests/test_transform.py` (howler-transform), `tests/test_load.py` (howler-load).\n\n---"
+      },
+      {
+        "title": "W3. `write_audit_log` error count is semantically ambiguous",
+        "category": "contract_ambiguity",
+        "finding_text": "`write_audit_log(pipeline_run_id: str, inserted: int, errors: int)`. howler-load only receives `list[NormalizedRecord]` \u2014 records that already passed validation and transform. Validation errors were filtered by howler-transform. howler-load cannot count validation failures.",
+        "suggested_fix": "Either (a) rename the parameter to `insert_errors` to make scope explicit, or (b) extend the signature to accept `validation_errors: int` passed in from upstream, and document where the caller sources that count.\n\n---"
+      },
+      {
+        "title": "W4. `pipeline_run_id` origin is undefined",
+        "category": "contract_ambiguity",
+        "finding_text": "`pipeline_run_id` appears in `NormalizedRecord`, `transform.runner.run(..., pipeline_run_id: str)`, and `audit.write_audit_log(pipeline_run_id, ...)`. The orchestrator is \"out of scope.\" Nothing in the contract specifies who generates it or what format it should be.",
+        "suggested_fix": "Add to CONTRACT.md Naming Conventions: \"`pipeline_run_id` is a UUID string generated once per pipeline invocation. In tests, use a fixed sentinel value (e.g., `'test-run-001'`). In production, the orchestrator generates it at startup.\"\n\n---"
+      }
+    ],
+    "verdict": "BLOCKED",
+    "accepted": [
+      "All 5 tasks marked `serial_risk: no`**: This is correct in the Spectrum sense. \"Serial risk\" refers to code implementation ordering, not runtime data flow. extract, validate, and transform can be coded independently against schema types. The runtime pipeline is sequential but the Howlers implement independent logic.",
+      "howler-load depending on howler-transform full completion**: Conservative but correct. While howler-load only needs `NormalizedRecord` (available at schema #types), taking a full dependency on howler-transform ensures the output format won't shift under howler-load during implementation. Safe call.",
+      "No pipeline orchestrator Howler**: The contract explicitly scopes this out. Acceptable for a first-pass ETL implementation. The stages can be unit tested independently without a runner. This should be noted as a follow-up item but it's not a spectrum blocker.",
+      "`ValidatedRecord.validation_errors` passthrough semantics**: howler-validate passes all records through (invariant: output length == input length), howler-transform filters on non-empty `validation_errors`. This is an intentional design decision (soft-fail at validate, hard-filter at transform). The two contracts are consistent with each other.",
+      "DAG structure**: howler-schema as the sole root with all others depending on `#types` is correct. The checkpoint unblock pattern is well-suited here since all downstream Howlers need types but not implementation."
+    ]
+  },
+  "parse_confidence": 1.0,
+  "scores": {
+    "detection_rate": 0.8333,
+    "severity_accuracy": 0.8333,
+    "fp_rate": 0.0,
+    "scenario_score": 0.8667,
+    "bug_scores": {
+      "bug-01": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": true
+      },
+      "bug-02": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": false
+      },
+      "bug-03": {
+        "found": true,
+        "credit": 0.5,
+        "severity_correct": true
+      }
+    }
+  },
+  "tokens_used": {
+    "input": 3410,
+    "output": 2534
+  },
+  "latency_ms": 117842,
+  "cost_usd": 0.04824,
+  "timestamp": "2026-04-01T00:21:27.781987+00:00"
+}

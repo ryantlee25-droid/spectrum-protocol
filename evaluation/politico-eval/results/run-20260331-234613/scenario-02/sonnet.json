@@ -1,0 +1,86 @@
+{
+  "scenario_id": "scenario-02",
+  "model": "sonnet",
+  "model_id": "claude-sonnet-4-6-20250320",
+  "raw_output": "# Politico Review\n_Rain ID: express-api-0331 | Reviewed: 2026-03-31_\n\n---\n\n## Blockers (must address before drop)\n\n### B1: `src/constants.ts` creates a hidden sequential dependency between parallel Howlers\n**Category**: Decomposition Flaw + Ownership Gap (combined)\n**Finding**: `JWT_ALGORITHM` lives in `src/constants.ts`, owned by howler-middleware. The CONTRACT.md integration table explicitly states \"howler-auth imports `JWT_ALGORITHM` from `@/constants`\". Yet the DAG shows no dependency edge from howler-auth \u2192 howler-middleware. These two Howlers are supposed to run fully in parallel. If howler-auth starts first (which it likely will, since it's on the critical path), it will write code that imports from a file that doesn't exist yet. TypeScript compilation and tests will fail in howler-auth's worktree.\n**Risk**: howler-auth fails at type-check or test stage when `tsc --noEmit` can't resolve `@/constants`. This blocks howler-auth's quality gate, which blocks howler-tests.\n**Suggested fix**: Move `JWT_ALGORITHM` out of `src/constants.ts` and into `src/types/auth.ts` (already owned by howler-auth). howler-middleware imports it from there instead. Alternatively, add a `howler-middleware#constants` checkpoint dep on howler-auth, but that forces auth to wait \u2014 moving the constant is cleaner.\n\n---\n\n### B2: `tests/helpers/app.ts` is in the contract but absent from the ownership matrix\n**Category**: Ownership Gap\n**Finding**: CONTRACT.md \u2014 Conventions for howler-tests \u2014 explicitly says: \"Create an Express app instance in a `tests/helpers/app.ts` test helper\". This is a file howler-tests will create. It is not in the ownership matrix. The CONFLICTS check is vacuously correct (no duplicate) but the file simply isn't tracked.\n**Risk**: Gold's post-Pax independent validation reads the ownership matrix to verify files exist. `tests/helpers/app.ts` won't be there. Minor false-negative in Pax, but more concretely: if a second Howler somehow needs this file later, there's no recorded owner to escalate to.\n**Suggested fix**: Add `tests/helpers/app.ts | howler-tests | CREATES` to the matrix.\n\n---\n\n### B3: `src/app.ts` has no owner \u2014 the production app factory is a ghost\n**Category**: Ownership Gap\n**Finding**: The CONTRACT.md integration table references \"routes registered before error handler in app factory\" as a real integration constraint. The contract tells howler-tests to create `tests/helpers/app.ts` specifically *instead* of importing from `src/app.ts` \u2014 implying `src/app.ts` is expected to exist as the production entry point. But no Howler owns or creates it. There is no `src/index.ts` or `src/server.ts` either.\n**Risk**: The project will have working middleware, working routes, and working test helpers, but no way to actually run the server. The middleware ordering constraint (\"routes before error handler\") cannot be enforced because nobody assembles the pipeline. howler-tests creates an internal app stub \u2014 but the production app is never built.\n**Suggested fix**: Assign `src/app.ts` to one Howler (howler-routes is the best fit \u2014 it knows the route shape). Add it to the ownership matrix. The CONTRACT.md postconditions for howler-routes should specify that `src/app.ts` exports an `createApp(): Express` factory that registers routes, then middleware, then error handler in the correct order.\n\n---\n\n## Warnings (should address)\n\n### W1: `JwtPayload` return type of `verifyToken` is undefined\n**Category**: Contract Ambiguity\n**Finding**: howler-auth's postcondition says `verifyToken(token: string): Promise<JwtPayload>` but `JwtPayload` is never defined in the contract. It could be the jsonwebtoken library's `JwtPayload` type, or it could be the decoded `{ userId, email, role, orgId }` shape from `AuthenticatedRequest.user`. howler-tests needs to mock this function \u2014 the mock needs to return a value of the right shape.\n**Risk**: howler-tests mocks `verifyToken` returning `{ userId: '...', email: '...' }` while howler-auth's actual return type is `jsonwebtoken.JwtPayload & { sub: string }`. Test mocks compile but don't match real behavior, hiding type errors.\n**Suggested fix**: Define `JwtPayload` explicitly in the contract (or in `src/types/auth.ts`) as the decoded token shape \u2014 likely `{ userId: string; email: string; role: 'admin' | 'user' | 'readonly'; orgId: string }`.\n\n---\n\n### W2: Error response body format is unspecified \u2014 auth 401s and middleware error handler may diverge\n**Category**: Contract Ambiguity\n**Finding**: howler-auth's postcondition says \"Authentication failures return HTTP 401 with a structured error body.\" howler-middleware's invariant says \"errorHandler always returns a JSON response.\" Neither specifies the JSON shape. howler-auth might return `{ error: \"Invalid token\" }` directly (before it ever reaches the error handler), while errorHandler returns `{ message: \"...\", statusCode: 401 }`. howler-tests then has to write two different assertion patterns for what should be one consistent error format.\n**Risk**: Test assertions are inconsistent and fragile; error format in production is inconsistent for API consumers.\n**Suggested fix**: Add an `ApiError` shape to the contract: `{ error: string; statusCode: number }`. Both howler-auth (for its direct 401s) and howler-middleware's errorHandler must conform to it.\n\n---\n\n### W3: `AuthenticatedRequest.user` is non-optional \u2014 TypeScript friction on mixed-auth routes\n**Category**: Contract Ambiguity\n**Finding**: The contract defines `user` as a required (non-optional) field on `AuthenticatedRequest`. The `/health` route has no auth and takes a plain `Request`. This is fine for health. But for any route that *conditionally* applies auth (if any are added later), TypeScript will require a cast to `AuthenticatedRequest` even when `user` may not be set. More immediately, if howler-routes or howler-tests casts `req as AuthenticatedRequest` in a context where `requireAuth` hasn't run, TypeScript won't catch the bug.\n**Risk**: Low risk for this run since all protected routes use `requireAuth` as the first middleware. But the contract definition will propagate to future code as a footgun.\n**Suggested fix**: Define `user` as required on `AuthenticatedRequest` (current) but add a note in the contract: \"never cast to `AuthenticatedRequest` in routes that do not call `requireAuth` first \u2014 the type assumes auth has run.\" This documents the assumption rather than changing the type.\n\n---\n\n## Accepted (no action needed)\n\n**howler-tests marked `serial_risk: yes`**: Correct. Tests depend on all three Howlers' outputs existing. The DAG correctly models this with full deps on howler-auth, howler-routes, and howler-middleware.\n\n**No barrel `index.ts` for routes or middleware**: The integration approach (each Howler's module imported directly in `src/app.ts`) avoids the classic barrel-file conflict pattern. Clean \u2014 assuming B3 (app.ts ownership) is resolved.\n\n**howler-routes depending only on `howler-auth#types` checkpoint**: The routes don't need middleware to be finished \u2014 they just call `next(err)` and let the error handler deal with it. The dep is correct as modeled.\n\n**Package dependencies unspecified in ownership matrix**: Acceptable if `package.json` already exists with the base Express setup. If this is a greenfield project, someone needs to run `npm install` \u2014 but that's a pre-spectrum setup concern, not a decomposition flaw.\n\n---\n\n## Verdict\n\n**BLOCKED** \u2014 3 blockers must be resolved before drop.\n\nB1 (JWT_ALGORITHM dep) is the highest urgency \u2014 it's a silent parallel-to-sequential promotion that will manifest as a compile failure mid-run. B3 (no app.ts owner) means the spectrum produces working components but an unrunnable server. B2 (test helper not in matrix) is minor but should be fixed while editing the matrix for B3.",
+  "parsed": {
+    "blockers": [
+      {
+        "title": "B1: `src/constants.ts` creates a hidden sequential dependency between parallel Howlers",
+        "category": "ownership_gap",
+        "finding_text": "`JWT_ALGORITHM` lives in `src/constants.ts`, owned by howler-middleware. The CONTRACT.md integration table explicitly states \"howler-auth imports `JWT_ALGORITHM` from `@/constants`\". Yet the DAG shows no dependency edge from howler-auth \u2192 howler-middleware. These two Howlers are supposed to run fully in parallel. If howler-auth starts first (which it likely will, since it's on the critical path), it will write code that imports from a file that doesn't exist yet. TypeScript compilation and tests will fail in howler-auth's worktree.",
+        "suggested_fix": "Move `JWT_ALGORITHM` out of `src/constants.ts` and into `src/types/auth.ts` (already owned by howler-auth). howler-middleware imports it from there instead. Alternatively, add a `howler-middleware#constants` checkpoint dep on howler-auth, but that forces auth to wait \u2014 moving the constant is cleaner.\n\n---"
+      },
+      {
+        "title": "B2: `tests/helpers/app.ts` is in the contract but absent from the ownership matrix",
+        "category": "ownership_gap",
+        "finding_text": "CONTRACT.md \u2014 Conventions for howler-tests \u2014 explicitly says: \"Create an Express app instance in a `tests/helpers/app.ts` test helper\". This is a file howler-tests will create. It is not in the ownership matrix. The CONFLICTS check is vacuously correct (no duplicate) but the file simply isn't tracked.",
+        "suggested_fix": "Add `tests/helpers/app.ts | howler-tests | CREATES` to the matrix.\n\n---"
+      },
+      {
+        "title": "B3: `src/app.ts` has no owner \u2014 the production app factory is a ghost",
+        "category": "ownership_gap",
+        "finding_text": "The CONTRACT.md integration table references \"routes registered before error handler in app factory\" as a real integration constraint. The contract tells howler-tests to create `tests/helpers/app.ts` specifically *instead* of importing from `src/app.ts` \u2014 implying `src/app.ts` is expected to exist as the production entry point. But no Howler owns or creates it. There is no `src/index.ts` or `src/server.ts` either.",
+        "suggested_fix": "Assign `src/app.ts` to one Howler (howler-routes is the best fit \u2014 it knows the route shape). Add it to the ownership matrix. The CONTRACT.md postconditions for howler-routes should specify that `src/app.ts` exports an `createApp(): Express` factory that registers routes, then middleware, then error handler in the correct order.\n\n---"
+      }
+    ],
+    "warnings": [
+      {
+        "title": "W1: `JwtPayload` return type of `verifyToken` is undefined",
+        "category": "contract_ambiguity",
+        "finding_text": "howler-auth's postcondition says `verifyToken(token: string): Promise<JwtPayload>` but `JwtPayload` is never defined in the contract. It could be the jsonwebtoken library's `JwtPayload` type, or it could be the decoded `{ userId, email, role, orgId }` shape from `AuthenticatedRequest.user`. howler-tests needs to mock this function \u2014 the mock needs to return a value of the right shape.",
+        "suggested_fix": "Define `JwtPayload` explicitly in the contract (or in `src/types/auth.ts`) as the decoded token shape \u2014 likely `{ userId: string; email: string; role: 'admin' | 'user' | 'readonly'; orgId: string }`.\n\n---"
+      },
+      {
+        "title": "W2: Error response body format is unspecified \u2014 auth 401s and middleware error handler may diverge",
+        "category": "contract_ambiguity",
+        "finding_text": "howler-auth's postcondition says \"Authentication failures return HTTP 401 with a structured error body.\" howler-middleware's invariant says \"errorHandler always returns a JSON response.\" Neither specifies the JSON shape. howler-auth might return `{ error: \"Invalid token\" }` directly (before it ever reaches the error handler), while errorHandler returns `{ message: \"...\", statusCode: 401 }`. howler-tests then has to write two different assertion patterns for what should be one consistent error format.",
+        "suggested_fix": "Add an `ApiError` shape to the contract: `{ error: string; statusCode: number }`. Both howler-auth (for its direct 401s) and howler-middleware's errorHandler must conform to it.\n\n---"
+      },
+      {
+        "title": "W3: `AuthenticatedRequest.user` is non-optional \u2014 TypeScript friction on mixed-auth routes",
+        "category": "contract_ambiguity",
+        "finding_text": "The contract defines `user` as a required (non-optional) field on `AuthenticatedRequest`. The `/health` route has no auth and takes a plain `Request`. This is fine for health. But for any route that *conditionally* applies auth (if any are added later), TypeScript will require a cast to `AuthenticatedRequest` even when `user` may not be set. More immediately, if howler-routes or howler-tests casts `req as AuthenticatedRequest` in a context where `requireAuth` hasn't run, TypeScript won't catch the bug.",
+        "suggested_fix": "Define `user` as required on `AuthenticatedRequest` (current) but add a note in the contract: \"never cast to `AuthenticatedRequest` in routes that do not call `requireAuth` first \u2014 the type assumes auth has run.\" This documents the assumption rather than changing the type.\n\n---"
+      }
+    ],
+    "verdict": "BLOCKED",
+    "accepted": [
+      "howler-tests marked `serial_risk: yes`**: Correct. Tests depend on all three Howlers' outputs existing. The DAG correctly models this with full deps on howler-auth, howler-routes, and howler-middleware.",
+      "No barrel `index.ts` for routes or middleware**: The integration approach (each Howler's module imported directly in `src/app.ts`) avoids the classic barrel-file conflict pattern. Clean \u2014 assuming B3 (app.ts ownership) is resolved.",
+      "howler-routes depending only on `howler-auth#types` checkpoint**: The routes don't need middleware to be finished \u2014 they just call `next(err)` and let the error handler deal with it. The dep is correct as modeled.",
+      "Package dependencies unspecified in ownership matrix**: Acceptable if `package.json` already exists with the base Express setup. If this is a greenfield project, someone needs to run `npm install` \u2014 but that's a pre-spectrum setup concern, not a decomposition flaw."
+    ]
+  },
+  "parse_confidence": 1.0,
+  "scores": {
+    "detection_rate": 0.8333,
+    "severity_accuracy": 0.8333,
+    "fp_rate": 0.5,
+    "scenario_score": 0.6667,
+    "bug_scores": {
+      "bug-01": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": true
+      },
+      "bug-02": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": false
+      },
+      "bug-03": {
+        "found": true,
+        "credit": 0.5,
+        "severity_correct": true
+      }
+    }
+  },
+  "tokens_used": {
+    "input": 2657,
+    "output": 1951
+  },
+  "latency_ms": 110769,
+  "cost_usd": 0.037236,
+  "timestamp": "2026-03-31T23:51:45.568891+00:00"
+}
