@@ -289,12 +289,19 @@ def _files_for_rider(fm: dict) -> list[str]:
 
 def _keyword_match(what: str, fm: dict, body: str) -> bool:
     """Return True if any significant keyword from `what` appears in rider's files or body."""
-    # Extract meaningful tokens (skip short words)
-    tokens = [t for t in re.split(r'[\s,./\\@]+', what) if len(t) >= 3]
+    # Extract meaningful tokens (skip short words and common noise tokens).
+    # Minimum length of 5 prevents tokens like "api", "get", "set", "src"
+    # from matching unrelated words (e.g. "api" matching "capital").
+    tokens = [t for t in re.split(r'[\s,./\\@]+', what) if len(t) >= 5]
     if not tokens:
         return False
     search_corpus = " ".join(_files_for_rider(fm)) + " " + body
-    return any(token.lower() in search_corpus.lower() for token in tokens)
+    # Use word-boundary matching to prevent substring false positives:
+    # e.g. "auth" must not match "authorization" or "therapy".
+    return any(
+        re.search(rf'\b{re.escape(token)}\b', search_corpus, re.IGNORECASE)
+        for token in tokens
+    )
 
 
 def check_seams(mailboxes: list[dict]) -> list[dict]:
@@ -342,8 +349,13 @@ def check_seams(mailboxes: list[dict]) -> list[dict]:
                     notes = f"Target rider status: {target_status}"
                 else:
                     target_files = _files_for_rider(target_fm)
+                    # Use path-component matching instead of substring matching to
+                    # prevent "auth" from matching "authorization/oauth.ts".
+                    # A `where` value must appear as a complete path segment (or
+                    # exact basename) in the target file path.
                     file_found = any(
-                        where.lower() in f.lower() for f in target_files
+                        where.lower() in [p.lower() for p in Path(f).parts]
+                        for f in target_files
                     ) if where else False
 
                     if file_found:

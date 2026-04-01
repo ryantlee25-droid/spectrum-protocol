@@ -18,6 +18,8 @@ Output (stdout):
 Exit 0 always — no-test projects should not fail the map.
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import re
@@ -115,7 +117,11 @@ def find_by_convention(source_file: Path, all_test_files: list[Path]) -> list[Pa
 
 # ── Import-based discovery ────────────────────────────────────────────────────
 
-def find_by_import(source_file: Path, all_test_files: list[Path]) -> list[Path]:
+def find_by_import(
+    source_file: Path,
+    all_test_files: list[Path],
+    content_cache: dict[Path, str] | None = None,
+) -> list[Path]:
     """
     Scan test files for import/require statements referencing the source file.
 
@@ -124,48 +130,59 @@ def find_by_import(source_file: Path, all_test_files: list[Path]) -> list[Path]:
       import { login } from '../auth/login'
       from src.auth.login import login_user
       const login = require('./auth/login')
+
+    Args:
+        source_file: The source file to find tests for.
+        all_test_files: All test files in the project.
+        content_cache: Optional pre-loaded dict mapping test file Path → content.
+                       If provided, avoids re-reading files for each source file.
+                       Build with {tf: tf.read_text(...) for tf in all_test_files}.
     """
     # Use stem (no extension) as the token to search for
     basename = source_file.stem  # e.g. "login"
 
-    # For Python, also try the full dotted module path fragment
-    # e.g. src/auth/login.py → "auth.login" and "login"
-    search_tokens = {basename}
-
     # Build a path fragment (last 2-3 components without extension) for more precision
     parts = source_file.parts
+    path_fragment_no_ext = None
     if len(parts) >= 2:
         # e.g. "auth/login" from "src/auth/login.ts"
-        path_fragment = "/".join(parts[-2:])
-        # Strip extension from last segment
         last_no_ext = parts[-1].rsplit(".", 1)[0]
         path_fragment_no_ext = "/".join(list(parts[-2:-1]) + [last_no_ext])
-        search_tokens.add(path_fragment_no_ext)
 
-    # Compile a regex that looks for the basename in import/require contexts
-    # Matches: import ... from '...basename...', require('...basename...')
-    # from basename import ..., import basename
-    pattern = re.compile(
-        r'(?:import|require|from)\s+[^\n]*' + re.escape(basename),
-        re.IGNORECASE
+    # Compile regexes that look for the basename in import/require contexts.
+    # Primary: match the basename as a whole word within an import/require/from line.
+    # Using word-boundary (\b) prevents "api" from matching "capital" or "test_api_utils".
+    import_line_pattern = re.compile(
+        r'(?:import|require|from)\s+[^\n]*\b' + re.escape(basename) + r'\b',
+        re.IGNORECASE,
+    )
+    # Secondary: if we have a path fragment (e.g. "auth/login"), match it too.
+    # Path fragments don't need \b because slashes are natural boundaries.
+    path_fragment_pattern = (
+        re.compile(re.escape(path_fragment_no_ext), re.IGNORECASE)
+        if path_fragment_no_ext
+        else None
     )
 
     matches = []
     for tf in all_test_files:
-        try:
-            content = tf.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
+        if content_cache is not None:
+            content = content_cache.get(tf, "")
+        else:
+            try:
+                content = tf.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
 
-        if pattern.search(content):
+        if import_line_pattern.search(content):
             matches.append(tf)
             continue
 
-        # Fallback: plain substring match for any token (catches Python dotted imports)
-        for token in search_tokens:
-            if len(token) >= 3 and token in content:
-                matches.append(tf)
-                break
+        # Secondary: match path fragment (e.g. "auth/login") anywhere — path
+        # separators make this precise enough without needing word boundaries.
+        # False negatives (missing a test) are preferred over false positives.
+        if path_fragment_pattern and path_fragment_pattern.search(content):
+            matches.append(tf)
 
     return matches
 
@@ -181,6 +198,15 @@ def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]
     root_path = Path(root).expanduser().resolve()
     all_test_files = find_all_test_files(root_path)
 
+    # Build a content cache: read every test file exactly once, regardless of
+    # how many source files we are mapping.  This drops O(S*T) reads to O(T).
+    test_content_cache: dict[Path, str] = {}
+    for tf in all_test_files:
+        try:
+            test_content_cache[tf] = tf.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            test_content_cache[tf] = ""
+
     result: dict[str, list[Path]] = {}
 
     for src_str in source_files:
@@ -193,8 +219,8 @@ def build_impact_map(source_files: list[str], root: str) -> dict[str, list[Path]
         # Convention-based matches
         convention_matches = find_by_convention(src_path, all_test_files)
 
-        # Import-based matches (excluding already-found convention matches)
-        import_matches = find_by_import(src_path, all_test_files)
+        # Import-based matches — reuse the pre-loaded content cache
+        import_matches = find_by_import(src_path, all_test_files, content_cache=test_content_cache)
 
         # Merge and deduplicate
         combined = list({tf.resolve(): tf for tf in convention_matches + import_matches}.values())

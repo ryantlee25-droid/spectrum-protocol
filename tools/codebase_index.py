@@ -58,10 +58,7 @@ def iter_source_files(root: Path) -> "Generator":
 # ── Import parsing ───────────────────────────────────────────────────────────
 
 # TypeScript/JavaScript import patterns
-RE_TS_IMPORT = re.compile(
-    r"""(?:import\s+(?:(?:type\s+)?(?:\{[^}]*\}|[\w*]+(?:\s*,\s*\{[^}]*\})?)\s+from\s+|)"""
-    r"""['"]([^'"]+)['"])"""
-)
+# Active TS import pattern — covers `import { x } from 'y'` and `import x from 'y'`
 RE_TS_IMPORT_FROM = re.compile(
     r"""import\s+(?:type\s+)?(?:\{[^}]*\}|[\w*]+(?:\s*,\s*\{[^}]*\})?)\s+from\s+['"]([^'"]+)['"]"""
 )
@@ -69,8 +66,12 @@ RE_TS_REQUIRE = re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""")
 RE_TS_DYNAMIC_IMPORT = re.compile(r"""import\s*\(\s*['"]([^'"]+)['"]\s*\)""")
 
 # Python import patterns
+# RE_PY_IMPORT handles absolute imports only (`import foo.bar`).
+# Relative imports always use `from`, never bare `import`.
 RE_PY_IMPORT = re.compile(r"""^import\s+([\w.]+)""", re.MULTILINE)
-RE_PY_FROM_IMPORT = re.compile(r"""^from\s+([\w.]+)\s+import""", re.MULTILINE)
+# Matches both absolute (`from foo.bar import X`) and relative (`from .models import X`,
+# `from ..utils import Y`, `from ...pkg import Z`) Python imports.
+RE_PY_FROM_IMPORT = re.compile(r"""^from\s+(\.{0,3}[\w.]*)\s+import""", re.MULTILINE)
 
 
 def extract_imports_ts(content: str) -> List[str]:
@@ -101,8 +102,13 @@ def extract_imports(filepath: Path, content: str) -> List[str]:
 
 # ── Import resolution ────────────────────────────────────────────────────────
 
-def resolve_ts_import(specifier: str, importer: Path, root: Path, file_index: Dict[str, Path]) -> Optional[str]:
-    """Resolve a TS/JS import specifier to a relative file path (from root)."""
+def resolve_ts_import(specifier: str, importer: Path, resolved_root: Path, file_index: Dict[str, Path]) -> Optional[str]:
+    """Resolve a TS/JS import specifier to a relative file path (from root).
+
+    Args:
+        resolved_root: Pre-resolved root path (call root.resolve() once at the
+                       entry point, not per invocation — finding 1.10).
+    """
     if not specifier.startswith("."):
         # Package import — return as-is (not a local file)
         return None
@@ -114,7 +120,7 @@ def resolve_ts_import(specifier: str, importer: Path, root: Path, file_index: Di
     for ext in [".ts", ".tsx", ".js", ".jsx"]:
         candidate = candidate_base.with_suffix(ext)
         try:
-            rel = candidate.relative_to(root.resolve())
+            rel = candidate.relative_to(resolved_root)
             if str(rel) in file_index:
                 return str(rel)
         except ValueError:
@@ -124,7 +130,7 @@ def resolve_ts_import(specifier: str, importer: Path, root: Path, file_index: Di
     for ext in [".ts", ".tsx", ".js", ".jsx"]:
         candidate = candidate_base / f"index{ext}"
         try:
-            rel = candidate.relative_to(root.resolve())
+            rel = candidate.relative_to(resolved_root)
             if str(rel) in file_index:
                 return str(rel)
         except ValueError:
@@ -555,12 +561,16 @@ def _detect_test_adjacency(filepath: Path, root: Path) -> List[str]:
 def build_import_graph(
     root: Path,
     target_files: Set[str],
-) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
+) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, str]]:
     """
     Build import graph for target files.
-    Returns (imports_of, imported_by) dicts keyed by relative path.
+    Returns (imports_of, imported_by, content_cache) dicts keyed by relative path.
     Only resolves one level deep in each direction.
+    content_cache maps relative path -> file content (read once, reused downstream).
     """
+    # Cache root.resolve() to avoid repeated syscalls (finding 1.10)
+    resolved_root = root.resolve()
+
     # Build file index: relative path -> absolute path
     file_index: Dict[str, Path] = {}
     for filepath in iter_source_files(root):
@@ -570,16 +580,23 @@ def build_import_graph(
         except ValueError:
             pass
 
+    # Read every source file once into a content cache (finding 1.8).
+    # This eliminates the O(N) second pass — both imports_of and imported_by
+    # loops read from the cache instead of hitting the filesystem separately.
+    content_cache: Dict[str, str] = {}
+    for rel_path, abs_path in file_index.items():
+        try:
+            content_cache[rel_path] = abs_path.read_text(errors="replace")
+        except (OSError, IOError):
+            pass
+
     # For target files: find what they import
     imports_of: Dict[str, List[str]] = {}
     for target in target_files:
-        if target not in file_index:
+        if target not in file_index or target not in content_cache:
             continue
         abs_path = file_index[target]
-        try:
-            content = abs_path.read_text(errors="replace")
-        except (OSError, IOError):
-            continue
+        content = content_cache[target]
 
         raw_imports = extract_imports(abs_path, content)
         resolved = []
@@ -587,7 +604,7 @@ def build_import_graph(
             if abs_path.suffix == ".py":
                 resolved_path = resolve_py_import(spec, root, file_index)
             else:
-                resolved_path = resolve_ts_import(spec, abs_path, root, file_index)
+                resolved_path = resolve_ts_import(spec, abs_path, resolved_root, file_index)
             if resolved_path:
                 resolved.append(resolved_path)
             else:
@@ -597,27 +614,26 @@ def build_import_graph(
                     resolved.append(f"[pkg]{pkg}")
         imports_of[target] = resolved
 
-    # For all files in the project: find who imports target files
+    # For all files in the project: find who imports target files (using cached content)
     imported_by: Dict[str, List[str]] = {t: [] for t in target_files}
 
     for rel_path, abs_path in file_index.items():
         if rel_path in target_files:
             continue  # Skip self-references
-        try:
-            content = abs_path.read_text(errors="replace")
-        except (OSError, IOError):
+        if rel_path not in content_cache:
             continue
 
+        content = content_cache[rel_path]
         raw_imports = extract_imports(abs_path, content)
         for spec in raw_imports:
             if abs_path.suffix == ".py":
                 resolved_path = resolve_py_import(spec, root, file_index)
             else:
-                resolved_path = resolve_ts_import(spec, abs_path, root, file_index)
+                resolved_path = resolve_ts_import(spec, abs_path, resolved_root, file_index)
             if resolved_path and resolved_path in target_files:
                 imported_by[resolved_path].append(rel_path)
 
-    return imports_of, imported_by
+    return imports_of, imported_by, content_cache
 
 
 # ── Output formatting ────────────────────────────────────────────────────────
@@ -664,8 +680,8 @@ def generate_index(
 
     target_set = set(normalized)
 
-    # Build import graph
-    imports_of, imported_by = build_import_graph(root, target_set)
+    # Build import graph (returns content cache — each file read once)
+    imports_of, imported_by, content_cache = build_import_graph(root, target_set)
 
     # Collect neighbor files (direct imports + dependents) for signature extraction
     neighbor_files: Set[str] = set()
@@ -684,10 +700,13 @@ def generate_index(
             output_parts.append("*File does not exist yet (CREATES)*\n")
             continue
 
-        try:
-            content = abs_path.read_text(errors="replace")
-        except (OSError, IOError):
-            continue
+        # Reuse cached content instead of re-reading from disk
+        content = content_cache.get(target)
+        if content is None:
+            try:
+                content = abs_path.read_text(errors="replace")
+            except (OSError, IOError):
+                continue
 
         output_parts.append(f"## Codebase Index: {target}\n")
 
@@ -705,16 +724,18 @@ def generate_index(
                 output_parts.append(f"- {sig}")
             output_parts.append("")
 
-        # Neighbor signatures (condensed)
+        # Neighbor signatures (condensed) — reuse content cache
         neighbor_sigs = []
         for nf in sorted(neighbor_files):
             nf_path = root / nf
-            if not nf_path.exists():
-                continue
-            try:
-                nf_content = nf_path.read_text(errors="replace")
-            except (OSError, IOError):
-                continue
+            nf_content = content_cache.get(nf)
+            if nf_content is None:
+                if not nf_path.exists():
+                    continue
+                try:
+                    nf_content = nf_path.read_text(errors="replace")
+                except (OSError, IOError):
+                    continue
             ns = extract_signatures(nf_path, nf_content)
             if ns:
                 neighbor_sigs.append((nf, ns))

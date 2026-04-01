@@ -112,20 +112,31 @@ def extract_howler_postconditions(contract_text: str, howler_name: str) -> list[
 # ── Postcondition classifiers ────────────────────────────────────────────────
 
 def classify_and_verify(
-    postcondition: str, root: Path
+    postcondition: str,
+    root: Path,
+    cache: Optional["FileCache"] = None,
 ) -> Optional[PostconditionResult]:
     """
     Classify a postcondition string and run the appropriate static check.
 
+    Args:
+        postcondition: The postcondition string to verify.
+        root: The project root directory.
+        cache: Optional FileCache built once per verification run. When provided,
+               all file-tree-walking helpers reuse the cached index instead of
+               issuing fresh os.walk calls per postcondition.
+
     Returns a PostconditionResult, or None if the postcondition couldn't be parsed.
     """
-    # Try each classifier in order (most specific first)
+    # Try each classifier in order (most specific first).
+    # _check_file_exists and _check_file_export read specific known files; they
+    # don't need the cache. The remaining four may walk the full tree.
     for classifier in [
-        _check_no_import,
+        lambda pc, r: _check_no_import(pc, r, cache),
         _check_file_export,
-        _check_export_exists,
-        _check_function_signature,
-        _check_type_shape,
+        lambda pc, r: _check_export_exists(pc, r, cache),
+        lambda pc, r: _check_function_signature(pc, r, cache),
+        lambda pc, r: _check_type_shape(pc, r, cache),
         _check_file_exists,
     ]:
         result = classifier(postcondition, root)
@@ -163,7 +174,11 @@ def _check_file_exists(postcondition: str, root: Path) -> Optional[Postcondition
     return None
 
 
-def _check_export_exists(postcondition: str, root: Path) -> Optional[PostconditionResult]:
+def _check_export_exists(
+    postcondition: str,
+    root: Path,
+    cache: Optional["FileCache"] = None,
+) -> Optional[PostconditionResult]:
     """
     Match: "exports X", "must export X"
     """
@@ -178,7 +193,7 @@ def _check_export_exists(postcondition: str, root: Path) -> Optional[Postconditi
             desc = f"exports {export_name}"
 
             # Search all TS/JS/PY files for the export
-            found_in = _find_export(root, export_name)
+            found_in = _find_export(root, export_name, cache=cache)
             if found_in:
                 return PostconditionResult(desc, True, f"found in {found_in}")
             else:
@@ -221,7 +236,9 @@ def _check_file_export(postcondition: str, root: Path) -> Optional[Postcondition
 
 
 def _check_function_signature(
-    postcondition: str, root: Path
+    postcondition: str,
+    root: Path,
+    cache: Optional["FileCache"] = None,
 ) -> Optional[PostconditionResult]:
     """
     Match: "X() return type — expected Y, found Z" style or
@@ -238,7 +255,7 @@ def _check_function_signature(
         expected_return = m.group(2).strip().rstrip("`").strip()
         desc = f"{func_name}() return type matches {expected_return}"
 
-        found_file, found_sig = _find_function_signature(root, func_name)
+        found_file, found_sig = _find_function_signature(root, func_name, cache=cache)
         if found_file is None:
             return PostconditionResult(
                 desc, False, f"function {func_name} not found in project"
@@ -260,7 +277,11 @@ def _check_function_signature(
     return None
 
 
-def _check_no_import(postcondition: str, root: Path) -> Optional[PostconditionResult]:
+def _check_no_import(
+    postcondition: str,
+    root: Path,
+    cache: Optional["FileCache"] = None,
+) -> Optional[PostconditionResult]:
     """
     Match: "X never imports from Y", "no circular imports between X and Y",
            "X does not import Y", "X must not import from Y"
@@ -287,7 +308,9 @@ def _check_no_import(postcondition: str, root: Path) -> Optional[PostconditionRe
             forbidden_pattern = m.group(2)
             desc = f"No imports from {source_pattern} to {forbidden_pattern}"
 
-            violations = _check_import_violation(root, source_pattern, forbidden_pattern)
+            violations = _check_import_violation(
+                root, source_pattern, forbidden_pattern, cache=cache
+            )
             if not violations:
                 return PostconditionResult(desc, True)
             else:
@@ -301,7 +324,11 @@ def _check_no_import(postcondition: str, root: Path) -> Optional[PostconditionRe
     return None
 
 
-def _check_type_shape(postcondition: str, root: Path) -> Optional[PostconditionResult]:
+def _check_type_shape(
+    postcondition: str,
+    root: Path,
+    cache: Optional["FileCache"] = None,
+) -> Optional[PostconditionResult]:
     """
     Match: "X.field is always Y", "X.field has type Y",
            "X includes field Y", "type X has member Y"
@@ -330,7 +357,7 @@ def _check_type_shape(postcondition: str, root: Path) -> Optional[PostconditionR
             )
 
             found_file, found_type = _find_type_member(
-                root, type_name, field_name
+                root, type_name, field_name, cache=cache
             )
             if found_file is None:
                 return PostconditionResult(
@@ -384,6 +411,47 @@ def _walk_source_files(root: Path, extensions: set[str] | None = None):
                 yield Path(dirpath) / fname
 
 
+# ── File cache ───────────────────────────────────────────────────────────────
+
+class FileCache:
+    """
+    Lazy file cache: walks the project tree once, remembers all source file
+    paths, and loads file content on first access per path.
+
+    This replaces O(N*P) os.walk calls (one per postcondition) with a single
+    walk plus one read per source file regardless of how many postconditions
+    reference it.
+
+    Usage:
+        cache = FileCache(root)
+        for fpath, content in cache.iter_files():
+            ...  # fpath is an absolute Path; content is the file text
+    """
+
+    def __init__(self, root: Path, extensions: set[str] | None = None):
+        self._root = root
+        self._extensions = extensions if extensions is not None else ALL_EXTENSIONS
+        # Populated lazily on first iter_files() call
+        self._paths: list[Path] | None = None
+        self._contents: dict[Path, str] = {}
+
+    def _ensure_index(self) -> None:
+        """Walk the tree once and collect all matching paths."""
+        if self._paths is not None:
+            return
+        self._paths = list(_walk_source_files(self._root, self._extensions))
+
+    def iter_files(self):
+        """Yield (Path, content_str) for each source file under root."""
+        self._ensure_index()
+        assert self._paths is not None
+        for fpath in self._paths:
+            if fpath not in self._contents:
+                content = _read_file_safe(fpath)
+                self._contents[fpath] = content if content is not None else ""
+            yield fpath, self._contents[fpath]
+
+
 def _read_file_safe(path: Path) -> Optional[str]:
     """Read a file, returning None on error."""
     try:
@@ -411,9 +479,10 @@ def _has_export(content: str, name: str, filepath: str) -> bool:
         patterns = [
             # def name or class name or name = ...
             rf"^(?:def|class)\s+{re.escape(name)}\b",
-            rf"^{re.escape(name)}\s*[=:]",
-            # In __all__
-            rf"""__all__\s*=\s*\[.*['\\"]{re.escape(name)}['\\""]""",
+            rf"^{re.escape(name)}\b\s*[=:]",
+            # In __all__ — word-boundary on name to prevent "User" matching "UserSession"
+            # Fixed mismatched quotes: use symmetric ['"] on both sides
+            rf"""__all__\s*=\s*\[.*['\"]\b{re.escape(name)}\b['\"]""",
         ]
     else:
         return False
@@ -424,10 +493,12 @@ def _has_export(content: str, name: str, filepath: str) -> bool:
     return False
 
 
-def _find_export(root: Path, name: str) -> Optional[str]:
+def _find_export(root: Path, name: str, cache: Optional["FileCache"] = None) -> Optional[str]:
     """Search all source files for an export of `name`. Return file path or None."""
-    for fpath in _walk_source_files(root):
-        content = _read_file_safe(fpath)
+    file_iter = cache.iter_files() if cache is not None else (
+        (fpath, _read_file_safe(fpath) or "") for fpath in _walk_source_files(root)
+    )
+    for fpath, content in file_iter:
         if content and _has_export(content, name, str(fpath)):
             try:
                 return str(fpath.relative_to(root))
@@ -437,7 +508,7 @@ def _find_export(root: Path, name: str) -> Optional[str]:
 
 
 def _find_function_signature(
-    root: Path, func_name: str
+    root: Path, func_name: str, cache: Optional["FileCache"] = None
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Find a function/method export and extract its return type annotation.
@@ -445,24 +516,26 @@ def _find_function_signature(
     """
     # TS pattern: export (async)? function funcName(...): ReturnType
     ts_pat = re.compile(
-        rf"\bexport\s+(?:default\s+)?(?:async\s+)?function\s+{re.escape(func_name)}\s*"
+        rf"\bexport\s+(?:default\s+)?(?:async\s+)?function\s+{re.escape(func_name)}\b\s*"
         rf"\([^)]*\)\s*:\s*([^\{{\n]+)",
         re.MULTILINE,
     )
     # TS arrow/const pattern: export const funcName = (...): ReturnType =>
     ts_arrow_pat = re.compile(
-        rf"\bexport\s+const\s+{re.escape(func_name)}\s*=\s*(?:async\s+)?\([^)]*\)\s*:\s*([^\s=>]+(?:<[^>]+>)?)",
+        rf"\bexport\s+const\s+{re.escape(func_name)}\b\s*=\s*(?:async\s+)?\([^)]*\)\s*:\s*([^\s=>]+(?:<[^>]+>)?)",
         re.MULTILINE,
     )
     # Python pattern: def func_name(...) -> ReturnType:
     py_pat = re.compile(
-        rf"^def\s+{re.escape(func_name)}\s*\([^)]*\)\s*->\s*([^:]+):",
+        rf"^def\s+{re.escape(func_name)}\b\s*\([^)]*\)\s*->\s*([^:]+):",
         re.MULTILINE,
     )
 
-    for fpath in _walk_source_files(root):
-        content = _read_file_safe(fpath)
-        if content is None:
+    file_iter = cache.iter_files() if cache is not None else (
+        (fpath, _read_file_safe(fpath) or "") for fpath in _walk_source_files(root)
+    )
+    for fpath, content in file_iter:
+        if not content:
             continue
 
         for pat in [ts_pat, ts_arrow_pat, py_pat]:
@@ -479,7 +552,10 @@ def _find_function_signature(
 
 
 def _check_import_violation(
-    root: Path, source_pattern: str, forbidden_pattern: str
+    root: Path,
+    source_pattern: str,
+    forbidden_pattern: str,
+    cache: Optional["FileCache"] = None,
 ) -> list[tuple[str, str]]:
     """
     Check that files matching source_pattern don't import from files matching
@@ -491,7 +567,10 @@ def _check_import_violation(
     source_pat = source_pattern.rstrip("/")
     forbidden_pat = forbidden_pattern.rstrip("/")
 
-    for fpath in _walk_source_files(root):
+    file_iter = cache.iter_files() if cache is not None else (
+        (fpath, _read_file_safe(fpath) or "") for fpath in _walk_source_files(root)
+    )
+    for fpath, content in file_iter:
         try:
             rel = str(fpath.relative_to(root))
         except ValueError:
@@ -501,8 +580,7 @@ def _check_import_violation(
         if source_pat not in rel:
             continue
 
-        content = _read_file_safe(fpath)
-        if content is None:
+        if not content:
             continue
 
         ext = fpath.suffix
@@ -534,19 +612,24 @@ def _check_import_violation(
 
 
 def _find_type_member(
-    root: Path, type_name: str, field_name: str
+    root: Path,
+    type_name: str,
+    field_name: str,
+    cache: Optional["FileCache"] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Find a type/interface definition and extract the type of a specific field.
     Returns (relative_path, field_type_string) or (None, None).
     """
     # TS: interface/type TypeName { ... fieldName: FieldType; ... }
-    # We need to find the type block and then the field within it
+    # We need to find the type block and then the field within it.
+    # Use word boundaries so "User" does not match "UserSession".
     type_start_pat = re.compile(
         rf"\b(?:export\s+)?(?:interface|type)\s+{re.escape(type_name)}\b"
     )
+    # Word boundary on field_name so "token" doesn't match "tokenExpiry"
     field_pat = re.compile(
-        rf"^\s*{re.escape(field_name)}\s*[?]?\s*:\s*(.+?)[\s;,]*$", re.MULTILINE
+        rf"^\s*{re.escape(field_name)}\b\s*[?]?\s*:\s*(.+?)[\s;,]*$", re.MULTILINE
     )
 
     # Python: class TypeName(TypedDict/BaseModel): ... field_name: FieldType
@@ -554,12 +637,14 @@ def _find_type_member(
         rf"^class\s+{re.escape(type_name)}\b", re.MULTILINE
     )
     py_field_pat = re.compile(
-        rf"^\s+{re.escape(field_name)}\s*:\s*(.+?)$", re.MULTILINE
+        rf"^\s+{re.escape(field_name)}\b\s*:\s*(.+?)$", re.MULTILINE
     )
 
-    for fpath in _walk_source_files(root):
-        content = _read_file_safe(fpath)
-        if content is None:
+    file_iter = cache.iter_files() if cache is not None else (
+        (fpath, _read_file_safe(fpath) or "") for fpath in _walk_source_files(root)
+    )
+    for fpath, content in file_iter:
+        if not content:
             continue
 
         ext = fpath.suffix
@@ -696,11 +781,16 @@ def run_verification(
         )
         return [], []
 
+    # Build a single lazy file cache for the entire verification run.
+    # All postcondition checks reuse this cache instead of each triggering a
+    # fresh os.walk traversal — reducing N full tree walks to at most 1.
+    file_cache = FileCache(root)
+
     results: list[PostconditionResult] = []
     skipped: list[str] = []
 
     for pc in postconditions:
-        result = classify_and_verify(pc, root)
+        result = classify_and_verify(pc, root, cache=file_cache)
         if result is not None:
             results.append(result)
         else:

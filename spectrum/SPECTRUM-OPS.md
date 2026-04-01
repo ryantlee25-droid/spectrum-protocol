@@ -40,6 +40,11 @@ Spectrum activates when ALL are true:
 4. **Validate PLAN.md** — sample 3-5 files to verify gap claims are current; flag stale assumptions. If PLAN.md is stale, have Blue refresh it before proceeding.
 5. Evaluate scale: 3+ tasks = Spectrum, 2 = consider sequential, 1 = single-agent
 6. **Update ARCHITECTURE.md** — persistent file at `~/.claude/projects/<slug>/ARCHITECTURE.md`. If exists: read it, patch only changed sections (new files, removed modules, dependency shifts). If not: create (~50-100 lines). Copy to Spectrum directory. **Never regenerate from scratch.**
+
+**Parallel muster reads**: Steps 3 (LESSONS.md + ENTITIES.md), ARCHITECTURE.md update,
+and codebase_index.py runs are independent read operations. Gold SHOULD initiate them
+in parallel (e.g., as background agents) rather than sequentially. Estimated savings:
+1-2 min per muster.
 7. For API/schema Spectrums: run Phase 1.5 → **DESIGN.md** (behavioral spec)
 8. **Decomposition hazard scan** — before writing MANIFEST.md, answer:
    - Does any Howler synthesize outputs from others? → Apply barrel file or fragment+stitch
@@ -59,8 +64,15 @@ Spectrum activates when ALL are true:
     - Integration points (what connects to what)
     - Design-by-Contract per Howler — full DbC for interface-heavy Howlers, conventions-only for pure-create Howlers
     - Test impact map per Howler: output of `python3 tools/test_impact_map.py --files {MODIFIES+CREATES} --root {project_root}` — which test files cover the Howler's owned files
-11. **Pre-freeze contract check (White Pre-Check)** — after writing CONTRACT.md, before freezing
-    it, drop a White with this prompt:
+11. **Pre-freeze review (parallel)** — Gold spawns White Pre-Check AND Politico
+    simultaneously. They run in parallel:
+    - White Pre-Check: verifies factual accuracy of CONTRACT.md against the codebase
+    - Politico: adversarially reviews decomposition logic and interface design
+    Gold waits for both to complete. Fixes White Pre-Check findings first (factual),
+    then addresses Politico blockers (logical). Both must clear before freezing.
+    **Estimated savings: ~3-4 min per full muster (previously sequential).**
+
+    White Pre-Check prompt:
     ```
     "Read CONTRACT.md for Spectrum {id}. You are doing a pre-freeze accuracy check against the
     actual codebase. Check: (a) do all files listed in MODIFIES actually exist? (b) do the
@@ -74,7 +86,7 @@ Spectrum activates when ALL are true:
     Gold patches CONTRACT.md to fix all STALE, MISSING, and MISMATCH findings before proceeding.
     For each finding that cannot be fixed (e.g., a file genuinely needs to be created as a
     precondition), document it as an `[ASSUMPTION: unverifiable, reason]` in CONTRACT.md.
-    **Skip for reaping mode and nano mode.**
+    **Skip White Pre-Check for reaping mode and nano mode.**
 12. **Contract-to-test generation** (TypeScript/Python spectrum runs only) — for each Howler
     with postconditions in CONTRACT.md, Gold generates a stub test file at
     `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts each postcondition is
@@ -106,7 +118,8 @@ Spectrum activates when ALL are true:
     If no test infrastructure exists, skip this step and document as `[ASSUMPTION: no test
     infrastructure — contract tests skipped]` in CONTRACT.md.
 13. For TypeScript: commit `convoy-contracts.d.ts` to base branch
-14. **Adversarial plan review (Phase 1.5: The Passage)** — drop Politico (Sonnet) with:
+14. *(Politico runs in parallel with White Pre-Check in step 11 — see step 11 above.)*
+    Politico prompt:
     ```
     "Read MANIFEST.md and CONTRACT.md for Spectrum {id}. You are the adversary.
     Find: (a) file ownership gaps — files needed but missing from the matrix,
@@ -114,7 +127,7 @@ Spectrum activates when ALL are true:
     mismatches, (c) decomposition flaws — tasks that should be sequential but
     are parallel, or vice versa. Report blockers (must fix), warnings (should
     fix), and observations (FYI). Be specific — name files and interfaces.
-    Note: the White Pre-Check (step 11) has already validated factual accuracy of CONTRACT.md
+    Note: the White Pre-Check has already validated factual accuracy of CONTRACT.md
     against the codebase. Your role is adversarial review of the *decomposition logic and
     interface design*, not re-checking file existence."
     ```
@@ -397,6 +410,15 @@ When dropping Howlers whose dependencies have completed, the Gold compresses com
 4. `git log -1` confirms the right starting point
 
 If wrong: halt Howler, fix, re-drop. Adds ~5s per Howler, prevents 10+ min debugging.
+
+### Quality Gate Triggering
+
+**Per-Howler gate triggering**: Quality gates (White + Gray + /diff-review) trigger
+immediately when each individual Howler declares completion. Do NOT wait for all
+Howlers to finish before starting gates. On a 4-Howler run with staggered completion,
+this reclaims 8-15 minutes that would otherwise be spent waiting.
+
+PAX begins only after the last Howler completes (or fails). PRs may be opened while other Howlers are still running, provided PAX has not started.
 
 ### Howler Drop Template
 ```
