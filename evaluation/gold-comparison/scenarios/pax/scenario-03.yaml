@@ -1,0 +1,282 @@
+scenario_id: "pax-03"
+gold_phase: "pax"
+difficulty: "medium"
+description: "5-Howler Pax: seam mismatch between two Howlers — one declares a seam that the other's implementation doesn't satisfy"
+
+contract_md: |
+  ## Integration Points
+
+  ### EventBus
+  All domain events flow through a shared EventBus singleton.
+  ```typescript
+  interface EventBus {
+    emit<T extends DomainEvent>(event: T): void;
+    subscribe<T extends DomainEvent>(
+      eventType: string,
+      handler: (event: T) => void
+    ): () => void; // returns unsubscribe fn
+  }
+  interface DomainEvent {
+    type: string;
+    payload: unknown;
+    timestamp: number;
+    correlationId: string;
+  }
+  ```
+
+  ### Event Contracts
+  - howler-order emits: OrderCreated, OrderCancelled
+  - howler-inventory listens to: OrderCreated (to decrement stock), OrderCancelled (to restore stock)
+  - howler-notification listens to: OrderCreated (send confirmation email), OrderCancelled (send cancellation email)
+  - howler-analytics listens to: ALL domain events (write to analytics store)
+
+  ## Postconditions
+
+  ### howler-eventbus
+  - exports EventBus interface and singleton instance `bus`
+  - exports DomainEvent interface
+  - exports OrderCreated: { type: 'order.created'; payload: { orderId: string; items: OrderItem[]; total: Money } }
+  - exports OrderCancelled: { type: 'order.cancelled'; payload: { orderId: string; reason: string } }
+
+  ### howler-order
+  - emits OrderCreated via `bus.emit()` when order is confirmed
+  - emits OrderCancelled via `bus.emit()` when order is cancelled
+  - imports bus from '@shared/eventbus'
+
+  ### howler-inventory
+  - subscribes to 'order.created' and 'order.cancelled' via `bus.subscribe()`
+  - decrements stock on OrderCreated, restores on OrderCancelled
+  - handler unsubscribed on module teardown
+
+  ### howler-notification
+  - subscribes to 'order.created' and 'order.cancelled' via `bus.subscribe()`
+  - sends email via NotificationService on each event
+
+  ### howler-analytics
+  - subscribes to ALL events by passing wildcard handler
+  - stores each DomainEvent to analytics store with timestamp
+
+debrief_set:
+  - howler: "howler-eventbus"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/shared/eventbus.ts
+      ## Completion Verification
+      - [x] All CREATES files exist
+      - [x] tsc --noEmit passes
+      - [x] Tests pass (6/6)
+    debrief: |
+      EventBus singleton implemented. DomainEvent, OrderCreated, OrderCancelled exported.
+      subscribe() returns unsubscribe function. Wildcard support via empty-string type.
+    files_created:
+      - path: "src/shared/eventbus.ts"
+        content: |
+          export interface DomainEvent {
+            type: string;
+            payload: unknown;
+            timestamp: number;
+            correlationId: string;
+          }
+          export interface OrderCreated extends DomainEvent {
+            type: 'order.created';
+            payload: { orderId: string; items: any[]; total: { amount: number; currency: string } };
+          }
+          export interface OrderCancelled extends DomainEvent {
+            type: 'order.cancelled';
+            payload: { orderId: string; reason: string };
+          }
+          export interface EventBus {
+            emit<T extends DomainEvent>(event: T): void;
+            subscribe<T extends DomainEvent>(eventType: string, handler: (event: T) => void): () => void;
+          }
+          class EventBusImpl implements EventBus {
+            private handlers: Map<string, Set<Function>> = new Map();
+            emit<T extends DomainEvent>(event: T): void {
+              const handlers = this.handlers.get(event.type) ?? new Set();
+              const wildcards = this.handlers.get('*') ?? new Set();
+              [...handlers, ...wildcards].forEach(h => h(event));
+            }
+            subscribe<T extends DomainEvent>(eventType: string, handler: (event: T) => void): () => void {
+              if (!this.handlers.has(eventType)) this.handlers.set(eventType, new Set());
+              this.handlers.get(eventType)!.add(handler);
+              return () => this.handlers.get(eventType)?.delete(handler);
+            }
+          }
+          export const bus = new EventBusImpl();
+
+  - howler: "howler-order"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/features/order/OrderService.ts
+      ## Completion Verification
+      - [x] All CREATES files exist
+      - [x] tsc --noEmit passes
+      - [x] Tests pass (10/10)
+      ## Seams Declared
+      - emits OrderCreated, OrderCancelled via bus
+    debrief: |
+      OrderService emits domain events correctly. Uses bus.emit() with proper typing.
+    files_created:
+      - path: "src/features/order/OrderService.ts"
+        content: |
+          import { bus, OrderCreated, OrderCancelled } from '@shared/eventbus';
+          export async function confirmOrder(orderId: string, items: any[], total: any): Promise<void> {
+            const event: OrderCreated = {
+              type: 'order.created',
+              payload: { orderId, items, total },
+              timestamp: Date.now(),
+              correlationId: crypto.randomUUID(),
+            };
+            bus.emit(event);
+          }
+          export async function cancelOrder(orderId: string, reason: string): Promise<void> {
+            const event: OrderCancelled = {
+              type: 'order.cancelled',
+              payload: { orderId, reason },
+              timestamp: Date.now(),
+              correlationId: crypto.randomUUID(),
+            };
+            bus.emit(event);
+          }
+
+  - howler: "howler-inventory"
+    status: "complete"
+    confidence: "high"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/features/inventory/InventoryService.ts
+      ## Completion Verification
+      - [x] All CREATES files exist
+      - [x] tsc --noEmit passes
+      - [x] Tests pass (8/8)
+      ## Seams Declared
+      - subscribes to 'order.created', 'order.cancelled' via bus.subscribe()
+      - seam with howler-eventbus: listens to OrderCreated, OrderCancelled events
+    debrief: |
+      Subscribes to order events. Decrements and restores stock as required.
+    files_created:
+      - path: "src/features/inventory/InventoryService.ts"
+        content: |
+          import { bus, OrderCreated, OrderCancelled } from '@shared/eventbus';
+          const stockLevels = new Map<string, number>();
+          export function initInventoryListeners(): () => void {
+            const unsub1 = bus.subscribe<OrderCreated>('order.created', (event) => {
+              for (const item of event.payload.items) {
+                const current = stockLevels.get(item.productId) ?? 0;
+                stockLevels.set(item.productId, current - item.qty);
+              }
+            });
+            const unsub2 = bus.subscribe<OrderCancelled>('order.cancelled', (event) => {
+              // BUG: does not restore stock — just logs the cancellation
+              console.log(`Order ${event.payload.orderId} cancelled: ${event.payload.reason}`);
+            });
+            return () => { unsub1(); unsub2(); };
+          }
+
+  - howler: "howler-notification"
+    status: "complete"
+    confidence: "medium"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/features/notification/NotificationService.ts
+      ## Completion Verification
+      - [x] All CREATES files exist
+      - [x] tsc --noEmit passes
+      - [x] Tests pass (6/6)
+      ## Seams Declared
+      - subscribes to 'order.created', 'order.cancelled' via bus.subscribe()
+    debrief: |
+      Sends confirmation and cancellation emails on order events. Working correctly.
+    files_created:
+      - path: "src/features/notification/NotificationService.ts"
+        content: |
+          import { bus, OrderCreated, OrderCancelled } from '@shared/eventbus';
+          export function initNotificationListeners(): () => void {
+            const unsub1 = bus.subscribe<OrderCreated>('order.created', async (event) => {
+              await sendEmail({ to: 'customer@example.com', subject: 'Order confirmed', body: `Order ${event.payload.orderId}` });
+            });
+            const unsub2 = bus.subscribe<OrderCancelled>('order.cancelled', async (event) => {
+              await sendEmail({ to: 'customer@example.com', subject: 'Order cancelled', body: event.payload.reason });
+            });
+            return () => { unsub1(); unsub2(); };
+          }
+          async function sendEmail(opts: { to: string; subject: string; body: string }) {
+            // email sending implementation
+          }
+
+  - howler: "howler-analytics"
+    status: "complete"
+    confidence: "low"
+    hook_md: |
+      ## Status: complete
+      ## Files Created
+      - src/features/analytics/AnalyticsCollector.ts
+      ## Completion Verification
+      - [x] All CREATES files exist
+      - [x] tsc --noEmit passes
+      - [x] Tests pass (4/4)
+      ## Seams Declared
+      - subscribes to all events via wildcard ('*')
+      ## Cross-Domain Observations
+      - howler-inventory's cancellation handler may not restore stock — saw console.log
+        where stock update should be
+    debrief: |
+      Analytics collector subscribes via wildcard. Writes all events to analytics store.
+      Note: observed potential issue in inventory but it was outside my scope.
+    files_created:
+      - path: "src/features/analytics/AnalyticsCollector.ts"
+        content: |
+          import { bus, DomainEvent } from '@shared/eventbus';
+          const analyticsStore: DomainEvent[] = [];
+          export function initAnalytics(): () => void {
+            const unsub = bus.subscribe<DomainEvent>('*', (event) => {
+              analyticsStore.push(event);
+            });
+            return unsub;
+          }
+          export function getAnalyticsStore(): readonly DomainEvent[] {
+            return analyticsStore;
+          }
+
+injected_deviations:
+  - howler: "howler-inventory"
+    deviation_type: "postcondition_violation"
+    description: >
+      CONTRACT.md postcondition: 'restores stock on OrderCancelled'. The implementation's
+      OrderCancelled handler only logs the cancellation (console.log) and does NOT
+      restore stock levels. Stock will permanently decrease on cancellations, causing
+      phantom stock-outs.
+    severity: "blocker"
+    location: "src/features/inventory/InventoryService.ts lines 12-15"
+    detection_method: >
+      Gold must read InventoryService.ts and check the OrderCancelled handler body.
+      The howler-analytics cross-domain observation in its HOOK.md actually flags this
+      ('saw console.log where stock update should be') — Gold should notice this
+      cross-domain signal even if it misses the direct file inspection.
+
+correct_howlers:
+  - "howler-eventbus"
+  - "howler-order"
+  - "howler-notification"
+  - "howler-analytics"
+
+scoring_notes: |
+  Medium difficulty. Two detection paths:
+  1. Direct: Gold reads InventoryService.ts and sees console.log instead of stock restore
+  2. Indirect: Gold reads howler-analytics HOOK.md cross-domain section which explicitly
+     flags the suspect behavior
+
+  Testing Gold's cross-domain observation synthesis: the protocol requires Gold to
+  read each Howler's HOOK.md cross-domain section. If Gold does this correctly, it
+  sees the analytics Howler's warning even before reading inventory files.
+
+  Difficulty calibration: medium because there's a cross-domain hint available.
+  A hard variant would have no hints and bury the bug deeper in a 200-line file.

@@ -16,25 +16,25 @@ Spectrum defines 14 agents across two tiers: the **core pipeline** (10 agents th
 
 | Color | Glyph | Role | Model | What They Do |
 |-------|-------|------|-------|-------------|
-| **Gold** | &#9819; | Orchestrator | Opus | Muster, contracts, seam analysis, merge planning |
-| **Blue** | &#9678; | Planner | Sonnet | Scopes work, produces PLAN.md before spectrum activates |
-| **Howler** | &#187; | Worker | Sonnet+ | Implements tasks in isolated worktrees (parallel) |
-| **White** | &#10022; | Reviewer | Sonnet | Pre-PR diff review, contract compliance |
-| **Gray** | &#9960; | Tester | Sonnet | Runs tests, diagnoses failures, writes missing coverage |
-| **Orange** | &#10023; | Debugger | Sonnet | Root cause analysis when Howlers hit blockers |
-| **Copper** | &#9654; | Delivery | Haiku | Commits, branch naming, PR creation |
-| **Obsidian** | &#8856; | Validator | Sonnet | Post-merge spec compliance against PLAN.md |
-| **Brown** | &#8962; | Archivist | Haiku | Drafts LESSONS.md from spectrum artifacts |
-| **Violet** | -- | Designer | Sonnet | Optional: produces DESIGN.md (behavioral spec) for API/schema work |
-| **Politico** | &#9889; | Critic | Sonnet | Adversarial review of contracts + manifest before freeze |
+| **Golds** | &#9819; | Orchestrator | Opus | Muster, contracts, seam analysis, merge planning |
+| **Blues** | &#9678; | Planner | Sonnet | Scopes work, produces PLAN.md before spectrum activates |
+| **Howlers** | &#187; | Worker | Sonnet+ | Implements tasks in isolated worktrees (parallel) |
+| **Whites** | &#10022; | Reviewer | Sonnet | Pre-PR diff review, contract compliance |
+| **Grays** | &#9960; | Tester | Sonnet | Runs tests, diagnoses failures, writes missing coverage |
+| **Oranges** | &#10023; | Debugger | Sonnet | Root cause analysis when Howlers hit blockers |
+| **Coppers** | &#9654; | Delivery | Haiku | Commits, branch naming, PR creation |
+| **Obsidians** | &#8856; | Validator | Sonnet | Post-merge spec compliance against PLAN.md |
+| **Browns** | &#8962; | Archivist | Haiku | Drafts LESSONS.md from spectrum artifacts |
+| **Violets** | -- | Designer | Sonnet | Optional: produces DESIGN.md (behavioral spec) for API/schema work |
+| **Politicos** | &#9889; | Critic | Sonnet | Adversarial review of contracts + manifest before freeze |
 
 ### Auxiliary Agents
 
 | Color | Glyph | Role | Model | What They Do |
 |-------|-------|------|-------|-------------|
-| **Helldiver** | &#9672; | Researcher | Sonnet | Problem research, validation, opportunity sizing |
+| **Helldivers** | &#9672; | Researcher | Sonnet | Problem research, validation, opportunity sizing |
 | **Primus** | &#8853; | Strategist | Sonnet | PRDs, prioritization, roadmaps |
-| **Green** | &#8801; | Decomposer | Sonnet | Breaks specs into scoped tickets |
+| **Greens** | &#8801; | Decomposer | Sonnet | Breaks specs into scoped tickets |
 
 ---
 
@@ -175,20 +175,20 @@ spectrum-protocol/
 │   ├── SPECTRUM-OPS.md        # Operator's manual (~550 lines)
 │   └── SPECTRUM.md            # Full specification (~2,300 lines)
 ├── agents/
-│   ├── gold.md                # Orchestrator
-│   ├── blue.md                # Planner
-│   ├── howler.md              # Worker
-│   ├── white.md               # Reviewer
-│   ├── gray.md                # Tester
-│   ├── orange.md              # Debugger
-│   ├── copper.md              # Delivery
-│   ├── obsidian.md            # Validator
-│   ├── brown.md               # Archivist
-│   ├── violet.md              # Designer
-│   ├── politico.md            # Critic
-│   ├── helldiver.md           # Researcher
+│   ├── golds.md               # Orchestrator
+│   ├── blues.md               # Planner
+│   ├── howlers.md             # Worker
+│   ├── whites.md              # Reviewer
+│   ├── grays.md               # Tester
+│   ├── oranges.md             # Debugger
+│   ├── coppers.md             # Delivery
+│   ├── obsidians.md           # Validator
+│   ├── browns.md              # Archivist
+│   ├── violets.md             # Designer
+│   ├── politicos.md           # Critic
+│   ├── helldivers.md          # Researcher
 │   ├── primus.md              # Strategist
-│   └── green.md               # Decomposer
+│   └── greens.md              # Decomposer
 ├── tools/
 │   └── seam_check.py          # Seam validation tool
 ├── examples/
@@ -256,3 +256,16 @@ Gas Town is the better choice for large-scale deployments (20+ agents) and teams
 - **The ecosystem** — [Overstory](https://github.com/jayminwest/overstory) (structural tool enforcement), [Citadel](https://github.com/SethGammon/Citadel) (machine-verifiable phase conditions), [metaswarm](https://github.com/dsifry/metaswarm) (adversarial review gates), and [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (context preservation) each contributed innovations that influenced v4.0
 
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
+
+## Release Notes
+
+### 2026-03-31 — Gold Model Downgrade: Opus → Sonnet
+
+**Gold agent model changed from Opus to Sonnet** across all protocol files, based on a structured evaluation (spectrum `gold-eval-0331`).
+
+- Built a reusable evaluation framework: 18 benchmark scenarios, machine-checkable rubrics, Python harness (179 tests), and scoring engine
+- Ran 12 head-to-head evaluations (6 scenarios x 2 models) across Muster, Pax, and Forge phases
+- **Results**: Sonnet scored 0.94 composite vs Opus 1.00, passing all phase thresholds (Muster 0.95/0.85, Pax 0.90/0.80, Forge 1.00/0.90)
+- **Cost impact**: 91% reduction in Gold phase costs (~$3.50/spectrum saved)
+- **One caveat**: Sonnet over-classifies severity in Pax (promotes observations to blockers). Mitigated by human review of Pax findings before actioning.
+- Full report: `evaluation/gold-comparison/results/COMPARISON-REPORT.md`

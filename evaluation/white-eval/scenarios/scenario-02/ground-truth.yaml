@@ -1,0 +1,70 @@
+scenario_id: "white-02"
+difficulty: "easy"
+domain: "Express search API"
+description: >
+  New Express search and autocomplete endpoints using raw SQL.
+  Planted: SQL injection via string interpolation in both search and autocomplete,
+  result.analytics bug (wrong property). Clean: LIMIT 5 on autocomplete is not a pagination issue.
+
+planted_bugs:
+  - bug_id: "bug-01"
+    category: "sql_injection"
+    severity: "blocker"
+    location: "src/api/search.ts:19"
+    description: >
+      The searchProducts handler interpolates req.query.q directly into a SQL string:
+      `WHERE name LIKE '%${query}%'`. An attacker can supply `'; DROP TABLE products; --`
+      or extract arbitrary data. The category parameter on line 22 has the same vulnerability.
+      Both parameters must use parameterized queries ($1, $2 placeholders with pool.query(sql, params)).
+    expected_finding: |
+      White should flag SQL injection via string interpolation in searchProducts.
+      Should cite the LIKE line (line 19) and the category concatenation (line 22).
+      Should suggest parameterized queries as the fix.
+    scoring:
+      full_credit_if: "identifies SQL injection AND cites the specific interpolation line(s) AND suggests parameterized queries"
+      partial_credit_if: "identifies SQL injection but only mentions one parameter or missing fix"
+      no_credit_if: "misses the SQL injection entirely"
+
+  - bug_id: "bug-02"
+    category: "sql_injection"
+    severity: "blocker"
+    location: "src/api/search.ts:43"
+    description: >
+      autocompleteProducts has the same SQL injection: `WHERE name ILIKE '%${partial}%'`.
+      This is a separate endpoint and a separate finding. The 2-character minimum check
+      does not mitigate injection.
+    expected_finding: |
+      White should flag SQL injection in autocompleteProducts as well (not just searchProducts).
+      A reviewer who only catches one of the two injections gets partial credit.
+    scoring:
+      full_credit_if: "flags the autocomplete SQL injection separately from searchProducts injection"
+      partial_credit_if: "notes there are multiple injection points but only details one"
+      no_credit_if: "misses the autocomplete injection (only catches searchProducts)"
+
+  - bug_id: "bug-03"
+    category: "bug"
+    severity: "blocker"
+    location: "src/api/search.ts:62"
+    description: >
+      getSearchAnalytics accesses result.analytics but pg's pool.query returns an object
+      with result.rows, not result.analytics. This will return undefined silently.
+      Should be result.rows.
+    expected_finding: |
+      White should flag that result.analytics does not exist on the pg query result —
+      the correct property is result.rows.
+    scoring:
+      full_credit_if: "identifies result.analytics as wrong and names result.rows as the fix"
+      partial_credit_if: "flags something wrong with the analytics response but unclear about the property name"
+      no_credit_if: "misses the wrong property access"
+
+clean_elements:
+  - element_id: "clean-01"
+    location: "src/api/search.ts:43"
+    description: >
+      LIMIT 5 hardcoded in autocomplete — looks like a magic number but is reasonable
+      for an autocomplete endpoint and doesn't need to be a named constant.
+    expected_handling: "White may suggest extracting to a constant (suggestion level only) but should not flag as a blocker or warning"
+    false_positive_if: "White flags LIMIT 5 as a blocker"
+
+false_positive_threshold: 0.20
+pass_threshold: 0.85

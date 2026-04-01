@@ -1,0 +1,74 @@
+{
+  "scenario_id": "scenario-03",
+  "model": "haiku",
+  "model_id": "claude-haiku-4-5",
+  "raw_output": "```\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n  CODE REVIEW REPORT\n  Files changed: 1 | Lines added: +78 | Lines removed: -0\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\n\u2500\u2500 BLOCKERS (3) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n[B1] src/api/posts.ts:24 & 72 \u2014 Pagination offset calculation is off-by-one\n     The offset is calculated as `page * limit` but should be `(page - 1) * limit`.\n     Pages are 1-indexed per the comment, but page=1 currently skips to offset 20\n     (showing results 20-39 instead of 0-19). This breaks pagination for all pages.\n     Fix: Change `const offset = page * limit;` to `const offset = (page - 1) * limit;`\n     on both line 24 and line 72.\n\n[B2] src/api/posts.ts:17 & 64 \u2014 No validation for negative page numbers\n     `parseInt(req.query.page as string) || 1` does not catch negative values.\n     `parseInt(\"-5\")` returns -5, and `-5 || 1` evaluates to -5 (not 1, since -5 is\n     truthy). This results in negative offsets being passed to the database, causing\n     undefined behavior or returning incorrect results.\n     Fix: Validate that page is >= 1: `const page = Math.max(1, parseInt(req.query.page as string) || 1);`\n\n[B3] src/api/posts.ts:19 & 67 \u2014 No validation for limit <= 0\n     `Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)`\n     does not reject zero or negative limits. `parseInt(\"-5\")` returns -5, and\n     `Math.min(-5, 100)` returns -5. Negative limits cause database errors or\n     incorrect query behavior.\n     Fix: Validate that limit is positive:\n     `const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE));`\n\n\u2500\u2500 WARNINGS (2) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n[W1] src/api/posts.ts:46 & 63 \u2014 Unvalidated slug and tag parameters in database queries\n     The `slug` (line 46) and `tag` (line 63) parameters come directly from\n     `req.params` and are used in database queries without validation or sanitization.\n     If the database uses MongoDB or similar, this could be vulnerable to injection\n     attacks (e.g., passing `{\"$gt\": \"\"}` as a tag). Even with a safe driver, it's\n     best practice to validate all user inputs.\n     Suggestion: Add validation/sanitization for slug and tag. Example:\n     `const slug = String(req.params.slug).slice(0, 255);` to ensure it's a safe string.\n\n[W2] Missing test coverage for new functions\n     `getPosts`, `getPostBySlug`, and `getPostsByTag` are new functions with no\n     corresponding tests. Coverage should include: pagination edge cases (page > totalPages,\n     page=0), invalid input (non-numeric page/limit), empty results, and 404 cases.\n\n\u2500\u2500 SUGGESTIONS (1) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n[S1] src/api/posts.ts:78 \u2014 Inconsistent pagination object formatting\n     In `getPosts` (lines 35\u201339), the pagination object is formatted across multiple\n     lines for readability. In `getPostsByTag` (line 77), it's compressed onto one line.\n     Suggestion: Format `getPostsByTag`'s pagination object consistently with `getPosts`\n     for maintainability.\n\n\u2500\u2500 VERDICT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n  \u2717 NOT READY \u2014 3 blocker(s) must be resolved before merging.\n     The pagination offset bug affects both `getPosts` and `getPostsByTag`, making\n     all paginated results incorrect. Input validation for page/limit must also be\n     fixed to prevent undefined database behavior.\n\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n```\n\n```\n\u2500\u2500 ORCHESTRATOR SUMMARY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n{\"blockers\": 3, \"warnings\": 2, \"suggestions\": 1, \"verdict\": \"NOT_READY\"}\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n```",
+  "parsed": {
+    "blockers": [
+      {
+        "title": "src/api/posts.ts:24 & 72 \u2014 Pagination offset calculation is off-by-one",
+        "body": "The offset is calculated as `page * limit` but should be `(page - 1) * limit`.\nPages are 1-indexed per the comment, but page=1 currently skips to offset 20\n(showing results 20-39 instead of 0-19). This breaks pagination for all pages.\nFix: Change `const offset = page * limit;` to `const offset = (page - 1) * limit;`\non both line 24 and line 72.",
+        "raw": "src/api/posts.ts:24 & 72 \u2014 Pagination offset calculation is off-by-one\n     The offset is calculated as `page * limit` but should be `(page - 1) * limit`.\n     Pages are 1-indexed per the comment, but page=1 currently skips to offset 20\n     (showing results 20-39 instead of 0-19). This breaks pagination for all pages.\n     Fix: Change `const offset = page * limit;` to `const offset = (page - 1) * limit;`\n     on both line 24 and line 72."
+      },
+      {
+        "title": "src/api/posts.ts:17 & 64 \u2014 No validation for negative page numbers",
+        "body": "`parseInt(req.query.page as string) || 1` does not catch negative values.\n`parseInt(\"-5\")` returns -5, and `-5 || 1` evaluates to -5 (not 1, since -5 is\ntruthy). This results in negative offsets being passed to the database, causing\nundefined behavior or returning incorrect results.\nFix: Validate that page is >= 1: `const page = Math.max(1, parseInt(req.query.page as string) || 1);`",
+        "raw": "src/api/posts.ts:17 & 64 \u2014 No validation for negative page numbers\n     `parseInt(req.query.page as string) || 1` does not catch negative values.\n     `parseInt(\"-5\")` returns -5, and `-5 || 1` evaluates to -5 (not 1, since -5 is\n     truthy). This results in negative offsets being passed to the database, causing\n     undefined behavior or returning incorrect results.\n     Fix: Validate that page is >= 1: `const page = Math.max(1, parseInt(req.query.page as string) || 1);`"
+      },
+      {
+        "title": "src/api/posts.ts:19 & 67 \u2014 No validation for limit <= 0",
+        "body": "`Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)`\ndoes not reject zero or negative limits. `parseInt(\"-5\")` returns -5, and\n`Math.min(-5, 100)` returns -5. Negative limits cause database errors or\nincorrect query behavior.\nFix: Validate that limit is positive:\n`const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE));`\n\u2500\u2500",
+        "raw": "src/api/posts.ts:19 & 67 \u2014 No validation for limit <= 0\n     `Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)`\n     does not reject zero or negative limits. `parseInt(\"-5\")` returns -5, and\n     `Math.min(-5, 100)` returns -5. Negative limits cause database errors or\n     incorrect query behavior.\n     Fix: Validate that limit is positive:\n     `const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE));`\n\n\u2500\u2500"
+      }
+    ],
+    "warnings": [
+      {
+        "title": "src/api/posts.ts:46 & 63 \u2014 Unvalidated slug and tag parameters in database queries",
+        "body": "The `slug` (line 46) and `tag` (line 63) parameters come directly from\n`req.params` and are used in database queries without validation or sanitization.\nIf the database uses MongoDB or similar, this could be vulnerable to injection\nattacks (e.g., passing `{\"$gt\": \"\"}` as a tag). Even with a safe driver, it's\nbest practice to validate all user inputs.\nSuggestion: Add validation/sanitization for slug and tag. Example:\n`const slug = String(req.params.slug).slice(0, 255);` to ensure it's a safe string.",
+        "raw": "src/api/posts.ts:46 & 63 \u2014 Unvalidated slug and tag parameters in database queries\n     The `slug` (line 46) and `tag` (line 63) parameters come directly from\n     `req.params` and are used in database queries without validation or sanitization.\n     If the database uses MongoDB or similar, this could be vulnerable to injection\n     attacks (e.g., passing `{\"$gt\": \"\"}` as a tag). Even with a safe driver, it's\n     best practice to validate all user inputs.\n     Suggestion: Add validation/sanitization for slug and tag. Example:\n     `const slug = String(req.params.slug).slice(0, 255);` to ensure it's a safe string."
+      },
+      {
+        "title": "Missing test coverage for new functions",
+        "body": "`getPosts`, `getPostBySlug`, and `getPostsByTag` are new functions with no\ncorresponding tests. Coverage should include: pagination edge cases (page > totalPages,\npage=0), invalid input (non-numeric page/limit), empty results, and 404 cases.\n\u2500\u2500",
+        "raw": "Missing test coverage for new functions\n     `getPosts`, `getPostBySlug`, and `getPostsByTag` are new functions with no\n     corresponding tests. Coverage should include: pagination edge cases (page > totalPages,\n     page=0), invalid input (non-numeric page/limit), empty results, and 404 cases.\n\n\u2500\u2500"
+      }
+    ],
+    "suggestions": [
+      {
+        "title": "src/api/posts.ts:78 \u2014 Inconsistent pagination object formatting",
+        "body": "In `getPosts` (lines 35\u201339), the pagination object is formatted across multiple\nlines for readability. In `getPostsByTag` (line 77), it's compressed onto one line.\nSuggestion: Format `getPostsByTag`'s pagination object consistently with `getPosts`\nfor maintainability.\n\u2500\u2500",
+        "raw": "src/api/posts.ts:78 \u2014 Inconsistent pagination object formatting\n     In `getPosts` (lines 35\u201339), the pagination object is formatted across multiple\n     lines for readability. In `getPostsByTag` (line 77), it's compressed onto one line.\n     Suggestion: Format `getPostsByTag`'s pagination object consistently with `getPosts`\n     for maintainability.\n\n\u2500\u2500"
+      }
+    ],
+    "verdict": "NOT_READY",
+    "orchestrator_json": {
+      "blockers": 3,
+      "warnings": 2,
+      "suggestions": 1,
+      "verdict": "NOT_READY"
+    }
+  },
+  "scores": {
+    "detection_rate": 1.0,
+    "severity_accuracy": 1.0,
+    "fp_rate": 1.5,
+    "fp_blockers": 3,
+    "composite": 0.8,
+    "bug_scores": {
+      "bug-01": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": 1.0,
+        "keyword_hit_rate": 1.0
+      },
+      "bug-02": {
+        "found": true,
+        "credit": 1.0,
+        "severity_correct": 1.0,
+        "keyword_hit_rate": 0.89
+      }
+    }
+  },
+  "latency_ms": 42808,
+  "timestamp": "2026-04-01T01:17:01.719537+00:00"
+}

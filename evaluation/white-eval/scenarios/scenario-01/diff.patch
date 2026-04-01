@@ -1,0 +1,98 @@
+diff --git a/src/utils/userProfile.ts b/src/utils/userProfile.ts
+new file mode 100644
+index 0000000..a3f9c21
+--- /dev/null
++++ b/src/utils/userProfile.ts
+@@ -0,0 +1,52 @@
++import { User, UserProfile } from '../types';
++import { db } from '../db';
++
++/**
++ * Fetches a user's profile by ID and returns their display data.
++ * Called from the profile page and the notification system.
++ */
++export async function getUserProfile(userId: string): Promise<UserProfile> {
++  const user = await db.users.findOne({ id: userId });
++
++  const profile: UserProfile = {
++    id: user.id,
++    displayName: user.firstName + ' ' + user.lastName,
++    email: user.email,
++    avatarUrl: user.avatarUrl,
++    joinedAt: user.createdAt,
++    postCount: user.posts.length,
++  };
++
++  return profile;
++}
++
++/**
++ * Updates the user's display name. Called from the settings page.
++ */
++export async function updateDisplayName(
++  userId: string,
++  newName: string
++): Promise<void> {
++  await db.users.update(
++    { id: userId },
++    { displayName: newName, updatedAt: new Date() }
++  );
++}
++
++/**
++ * Returns a list of all users who joined in the last 30 days.
++ * Used on the admin dashboard.
++ */
++export async function getRecentUsers(): Promise<User[]> {
++  const cutoff = new Date();
++  cutoff.setDate(cutoff.getDate() - 30);
++
++  const users = await db.users.find({ createdAt: { $gte: cutoff } });
++  return users;
++}
++
++/**
++ * Soft-deletes a user account.
++ */
++export async function deleteUser(userId: string): Promise<void> {
++  await db.users.update({ id: userId }, { deletedAt: new Date() });
++  console.log(`User ${userId} deleted`);
++}
+diff --git a/src/components/ProfileCard.tsx b/src/components/ProfileCard.tsx
+new file mode 100644
+index 0000000..b8d2c11
+--- /dev/null
++++ b/src/components/ProfileCard.tsx
+@@ -0,0 +1,38 @@
++import React from 'react';
++import { UserProfile } from '../types';
++
++interface ProfileCardProps {
++  profile: UserProfile;
++  onEdit?: () => void;
++}
++
++export function ProfileCard({ profile, onEdit }: ProfileCardProps) {
++  return (
++    <div className="profile-card">
++      <img src={profile.avatarUrl} alt="Avatar" />
++      <h2>{profile.displayName}</h2>
++      <p>{profile.email}</p>
++      <p>Member since {profile.joinedAt.toLocaleDateString()}</p>
++      <p>{profile.postCount} posts</p>
++      {onEdit && (
++        <button onClick={onEdit}>Edit Profile</button>
++      )}
++    </div>
++  );
++}
++
++export function ProfileCardSkeleton() {
++  return (
++    <div className="profile-card skeleton">
++      <div className="avatar-placeholder" />
++      <div className="text-placeholder" />
++      <div className="text-placeholder" />
++    </div>
++  );
++}

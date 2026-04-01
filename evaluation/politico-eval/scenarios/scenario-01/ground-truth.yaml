@@ -1,0 +1,114 @@
+scenario_id: "politico-01"
+difficulty: "easy"
+domain: "static site"
+description: >
+  3-Howler pure-create Next.js blog. howler-layout builds the shell, howler-posts
+  handles MDX blog content, howler-about creates auxiliary pages. Three planted bugs:
+  missing globals.css from ownership matrix, ambiguous component file naming convention,
+  and two parallel Howlers both modifying next.config.js.
+
+planted_bugs:
+  - bug_id: "bug-01"
+    category: "ownership_gap"
+    severity: "blocker"
+    location: "MANIFEST.md file ownership matrix"
+    description: >
+      globals.css (or equivalent global stylesheet) is required by the root layout
+      (src/app/layout.tsx) to apply Tailwind base styles and font CSS variables, but
+      it does not appear in the ownership matrix. howler-layout will need to create it,
+      but no Howler claims it.
+    expected_finding: |
+      Politico should flag that the global stylesheet (src/app/globals.css) is absent
+      from the ownership matrix. howler-layout imports it in layout.tsx to apply
+      Tailwind base layers and font CSS custom properties — without it, the build
+      will fail or styles will be missing entirely.
+    scoring:
+      full_credit_if: >
+        Names the specific file (globals.css or src/app/globals.css) AND notes it is
+        unclaimed AND suggests assigning it to howler-layout
+      partial_credit_if: >
+        Notes that a shared stylesheet or global CSS is missing from the matrix without
+        naming the specific file
+      no_credit_if: >
+        Mentions CSS only in passing, or accepts the matrix as complete, or flags it
+        only as an observation rather than a blocker/warning
+
+  - bug_id: "bug-02"
+    category: "contract_ambiguity"
+    severity: "warning"
+    location: "CONTRACT.md naming conventions"
+    description: >
+      The naming conventions section says "use standard React conventions for component
+      naming" without specifying whether component FILES should be PascalCase (Nav.tsx),
+      kebab-case (nav.tsx), or directory-style (nav/index.tsx). The matrix uses
+      PascalCase (Nav.tsx, Footer.tsx) but the convention text is silent on this —
+      howler-about could legitimately create about.tsx instead of a directory, causing
+      import mismatches if other Howlers reference the file path.
+    expected_finding: |
+      Politico should flag that "standard React conventions" is underspecified for file
+      naming. The matrix shows PascalCase for components (Nav.tsx, Footer.tsx) but the
+      conventions section doesn't codify this — howler-about could create about/page.tsx
+      (already correct by Next.js convention) but any component files it creates could
+      use any casing. The convention should explicitly state: component files use
+      PascalCase (e.g., ErrorBoundary.tsx, not error-boundary.tsx).
+    scoring:
+      full_credit_if: >
+        Identifies the specific gap ("standard React conventions" is ambiguous for file
+        casing) AND names the conflicting possibilities (PascalCase vs kebab-case) AND
+        notes the matrix already implies PascalCase
+      partial_credit_if: >
+        Notes that component naming conventions are underspecified without identifying
+        the specific ambiguity or what conflicting implementations look like
+      no_credit_if: >
+        Accepts the naming conventions section as adequate, or flags it only as a
+        stylistic preference rather than an implementable gap
+
+  - bug_id: "bug-03"
+    category: "decomposition_flaw"
+    severity: "blocker"
+    location: "MANIFEST.md DAG and file ownership matrix"
+    description: >
+      howler-about is marked parallel to howler-posts (both have no deps on each other
+      in the DAG), but howler-about MODIFIES next.config.js (in the ownership matrix)
+      while howler-layout's preconditions in CONTRACT.md state that next.config.js
+      exists as a base config. More critically, howler-posts' MDX support also requires
+      a next.config.js change (adding withMDX wrapper) — this is stated in the
+      CONTRACT.md postconditions for howler-posts ("Static generation: both pages use
+      generateStaticParams") and implied by the dependency on @next/mdx. Two Howlers
+      (howler-posts and howler-about) will both need to modify next.config.js, but only
+      howler-about owns it. This is a hidden sequential dependency masked as parallel work.
+    expected_finding: |
+      Politico should flag that next.config.js is owned by howler-about but howler-posts
+      also requires modifying it to wrap the config with withMDX (required for MDX
+      rendering). Both Howlers are parallel, creating a file ownership conflict. Either
+      howler-posts should depend on howler-about (making them sequential), or the
+      next.config.js modifications should be consolidated into a single Howler.
+    scoring:
+      full_credit_if: >
+        Identifies next.config.js as the conflict point AND names both Howlers that
+        need to touch it (howler-about owns it, howler-posts needs to modify it for MDX)
+        AND suggests a concrete resolution (sequential dep or consolidation)
+      partial_credit_if: >
+        Flags the next.config.js issue without naming both Howlers, or identifies
+        only the DAG problem without connecting it to the MDX configuration requirement
+      no_credit_if: >
+        Misses the file conflict entirely, or accepts the parallel decomposition as valid
+
+clean_elements:
+  - element_id: "clean-01"
+    location: "CONTRACT.md shared types — PageProps"
+    description: >
+      PageProps is defined in howler-layout and imported by howler-posts. This could
+      look like a shared ownership problem (two Howlers depending on one type) but
+      it is correctly modeled: howler-layout owns the type, howler-posts consumes it
+      via the #types checkpoint dep in the DAG. The integration point is documented
+      in CONTRACT.md. This is a clean seam, not a gap.
+    expected_handling: >
+      Politico should either accept this as correctly designed or not mention it at all.
+      The #types checkpoint dep is explicitly modeled in the DAG.
+    false_positive_if: >
+      Politico flags PageProps as a shared ownership conflict, or says both Howlers
+      need to own the type, or calls the #types checkpoint dep an architectural smell
+
+false_positive_threshold: 0.20
+pass_threshold: 0.85

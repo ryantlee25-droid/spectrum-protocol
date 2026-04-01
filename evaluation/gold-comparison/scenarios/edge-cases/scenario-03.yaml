@@ -1,0 +1,135 @@
+scenario_id: "edge-03"
+gold_phase: "forge"
+difficulty: "hard"
+description: "Contract amendment situation: Howler discovers that a CONTRACT.md interface is implementable but would produce incorrect behavior — tests Gold's amendment handling vs premature restructure"
+
+hook_md_excerpt: |
+  ## Status: blocked
+  ## Task
+  howler-search: implement full-text search service using Elasticsearch
+
+  ## Progress before block
+  - [x] Created src/search/SearchService.ts
+  - [x] Created src/search/IndexManager.ts
+  - [x] Elasticsearch index mappings for User and Product types
+  - [ ] CONTRACT compliance — blocked
+
+  ## Contract Issue Discovered
+  CONTRACT.md postcondition for howler-search:
+    searchUsers(query: string, filters: UserFilter): Promise<SearchResult<User>[]>
+    searchProducts(query: string, filters: ProductFilter): Promise<SearchResult<Product>[]>
+
+  CONTRACT.md defines SearchResult<T>:
+    interface SearchResult<T> {
+      item: T;
+      score: number;  // Elasticsearch relevance score, 0-1 range normalized
+    }
+
+  THE PROBLEM:
+  Elasticsearch's _score is NOT normalized to 0-1. It is an unbounded positive float
+  (typical values: 1.5 to 25.0, can exceed 100 for boosted fields). The CONTRACT
+  says `score: number` with comment "0-1 range normalized" but this normalization
+  would require a second query to find the max score (expensive) or an arbitrary
+  divisor that produces inconsistent results across query types.
+
+  IMPACT:
+  - I can implement the CONTRACT signature exactly (score: number)
+  - If I return raw ES scores (unbounded), callers expecting 0-1 will break UI
+    rendering (progress bars, confidence indicators) that assume 0-1 range
+  - If I normalize, it requires an extra query (latency hit) or is mathematically wrong
+
+  ## What I need
+  Contract amendment decision before proceeding. Options:
+  A. Remove the "0-1 range normalized" constraint — callers handle raw ES scores
+  B. Change score to rawScore: number — rename the field and drop normalization claim
+  C. Add a separate normalizedScore method — keep both
+  D. Mandate normalization via max-score query — accept the latency cost
+
+error_context: |
+  Elasticsearch documentation:
+    "_score: relevance score. Not bounded. Higher is more relevant. The scale depends
+     on the query type — a match query on a short field may score 5.0; a multi_match
+     with boosting may score 50.0."
+
+  Current CONTRACT.md SearchResult definition (written by howler-shared-types):
+    interface SearchResult<T> {
+      item: T;
+      score: number;  // Elasticsearch relevance score, 0-1 range normalized
+    }
+
+  Files in other Howlers that reference SearchResult.score:
+    - src/components/SearchResultCard.tsx (howler-ui): renders a "relevance" progress bar 0-100%
+      using Math.round(result.score * 100)
+    - src/analytics/SearchAnalytics.ts (howler-analytics): bins scores into quartiles:
+      if (score < 0.25) lowRelevance; if (score < 0.75) medRelevance; else highRelevance;
+
+  Both downstream consumers assume 0-1 normalized score.
+
+failure_history:
+  - attempt: 1
+    classification: null
+    locus: "src/search/SearchService.ts"
+    error: "contract score field semantics are implementable but produce incorrect downstream behavior"
+
+correct_classification: "structural"
+correct_recovery_action: "restructure"
+circuit_breaker_applies: false
+
+rationale: |
+  This is a structural failure — a contract specification error that cannot be fixed
+  by the Howler alone:
+
+  1. The CONTRACT.md assumption (ES scores are 0-1 normalized) is technically incorrect
+     about how Elasticsearch works. This is a specification error, not a code error.
+
+  2. The fix requires amending CONTRACT.md — which the Howler correctly cannot do
+     (contract is frozen). The Howler correctly blocked and filed a detailed impact analysis.
+
+  3. Two downstream Howlers (howler-ui, howler-analytics) have already built against
+     the 0-1 assumption. Any fix requires coordinating changes across 3 Howlers' codebases
+     — this is a structural replan, not a code fix.
+
+  4. The Howler cannot resolve this independently: all four options require either
+     changing the contract (A, B, C) or accepting a performance tradeoff Gold must decide (D).
+
+  Correct action: restructure. Gold must:
+  1. Decide which option (A-D) to adopt — this requires judgment about the product requirements
+  2. Update CONTRACT.md via AMENDMENT.md (breaking change if score semantics change)
+  3. Determine which previously-completed Howlers need to update their implementations
+     (howler-ui and howler-analytics if score semantics change)
+
+  Wrong answers:
+  - logical: incorrect — there's no logic bug in the Howler's code; the spec is wrong
+  - resume: incorrect — the Howler has correctly blocked and needs a contract decision
+    before any implementation can proceed
+  - transient: incorrect — this is a deterministic specification issue
+
+  Note: this scenario tests whether Gold understands the distinction between:
+  - A Howler that should be BLOCKED (correctly identified a spec error → structural + restructure)
+  - A Howler that misunderstood the spec (logical + resume with clarification)
+
+  The Howler's analysis here is CORRECT and DETAILED. The correct Gold response validates
+  the Howler's finding, files an AMENDMENT.md, and issues updated instructions to
+  affected Howlers.
+
+scoring_notes: |
+  Edge case: tests Gold's handling of a correct block + contract amendment situation.
+
+  The Howler did everything right:
+  - Blocked before producing incorrect output
+  - Provided detailed impact analysis
+  - Listed the options with tradeoffs
+  - Did NOT silently diverge from the contract
+
+  Gold's response quality:
+  - Must recognize this as structural (contract spec error)
+  - Must NOT ask the Howler to just "pick option A and proceed" without updating CONTRACT
+  - Must identify that howler-ui and howler-analytics will also need updates if score
+    semantics change
+  - Should recommend option B (rename rawScore) as least disruptive while being honest
+    about semantics, or option D (normalize via max-score) if UI consistency is required
+
+  Discriminating test: does Gold understand that a contract amendment affects ALL
+  consumers of the affected type, not just the blocking Howler? A shallow Gold response
+  focuses only on howler-search. A deep Gold response flags howler-ui and howler-analytics
+  as needing concurrent changes.

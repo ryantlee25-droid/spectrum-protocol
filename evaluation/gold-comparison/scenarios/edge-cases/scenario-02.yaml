@@ -1,0 +1,141 @@
+scenario_id: "edge-02"
+gold_phase: "muster"
+difficulty: "hard"
+description: "Ambiguous task boundary: a feature that straddles two natural domains — Gold must decide ownership, and the wrong choice creates a latent integration risk"
+
+task_description: |
+  Add a 'recently viewed products' feature to the e-commerce app. Users should see
+  their last 10 viewed products on their profile page and in a sidebar widget. The
+  feature requires:
+  1. Tracking product views (recording when a user views a product detail page)
+  2. Storing view history (persisted, not just session-local)
+  3. Retrieving view history (for the profile page)
+  4. Displaying view history (sidebar widget and profile page component)
+
+  The team is split into two domain Howlers: howler-products (owns product domain) and
+  howler-users (owns user domain). A third Howler handles frontend components.
+
+plan_excerpt: |
+  ## Task: Recently Viewed Products Feature
+
+  ### Backend
+  - Track product views: record UserProductView(userId, productId, viewedAt)
+  - Persist to database: user_product_views table
+  - Query: get last 10 views for a userId
+
+  ### Frontend
+  - RecentlyViewedWidget — sidebar component showing last 5 products
+  - RecentlyViewedSection — full list on profile page
+
+  ### Current domain owners
+  - howler-products: owns ProductRepository, ProductCard, product-related API routes
+  - howler-users: owns UserRepository, UserProfile, user-related API routes
+  - howler-frontend: owns layout components and composite page components
+
+  ### The ambiguity
+  UserProductView is a join entity: belongs to both User domain (it's a user behavior)
+  and Product domain (it references products). Either domain Howler could plausibly own it.
+
+codebase_context:
+  - path: "src/repositories/ProductRepository.ts"
+    content: |
+      export class ProductRepository {
+        async findById(id: string): Promise<Product | null> { /* ... */ }
+        async findMany(ids: string[]): Promise<Product[]> { /* ... */ }
+        async search(query: string): Promise<Product[]> { /* ... */ }
+      }
+  - path: "src/repositories/UserRepository.ts"
+    content: |
+      export class UserRepository {
+        async findById(id: string): Promise<User | null> { /* ... */ }
+        async updateProfile(id: string, data: Partial<User>): Promise<User> { /* ... */ }
+        async getRecentActivity(userId: string): Promise<ActivityEvent[]> { /* ... */ }
+      }
+  - path: "src/db/schema.ts"
+    content: |
+      // Prisma schema excerpt
+      // model User { id, email, name, createdAt }
+      // model Product { id, name, price, inventory }
+      // no UserProductView model yet — needs to be created
+
+num_howlers: 3
+
+expected_file_ownership:
+  - file: "src/repositories/ViewHistoryRepository.ts"
+    howler: "howler-users"
+    action: "CREATES"
+    rationale: >
+      View history is a user behavior artifact. The query pattern (get recent views
+      for a userId) is user-centric. Assigning to howler-users aligns with
+      single-responsibility: user behaviors live in the user domain.
+  - file: "src/db/migrations/add_user_product_views.sql"
+    howler: "howler-users"
+    action: "CREATES"
+  - file: "src/api/viewHistoryRoutes.ts"
+    howler: "howler-users"
+    action: "CREATES"
+  - file: "src/components/RecentlyViewedWidget.tsx"
+    howler: "howler-frontend"
+    action: "CREATES"
+  - file: "src/components/RecentlyViewedSection.tsx"
+    howler: "howler-frontend"
+    action: "CREATES"
+  - file: "src/hooks/useViewHistory.ts"
+    howler: "howler-frontend"
+    action: "CREATES"
+
+known_conflicts:
+  - file: "src/repositories/ViewHistoryRepository.ts"
+    naive_howlers: ["howler-products", "howler-users"]
+    correct_resolution: >
+      Assign to howler-users. The repository queries by userId (user-centric access pattern).
+      howler-products could also claim ownership (references ProductId), but the primary
+      access pattern (get recent views FOR a user) puts this in the user domain.
+      Either assignment avoids a conflict — the conflict arises if neither Howler is
+      assigned and both create the file independently.
+  - file: "src/api/viewHistoryRoutes.ts"
+    naive_howlers: ["howler-products", "howler-users"]
+    correct_resolution: >
+      Assign to howler-users. The route GET /users/:id/recently-viewed is a sub-resource
+      of the user API. A naive decomposition might have howler-products create
+      GET /products/recently-viewed/:userId (product-centric URL), creating two
+      routes for the same data from different perspectives.
+
+expected_dag_edges:
+  - from: "howler-frontend"
+    to: "howler-users"
+    type: "types"
+    note: "Frontend components import ViewHistory type and useViewHistory hook depends on the API route"
+
+expected_contract_sections:
+  - section: "ownership_rationale"
+    must_include:
+      - "ViewHistoryRepository owned by howler-users (user-centric access pattern)"
+      - "howler-products does not own ViewHistoryRepository"
+  - section: "shared_types"
+    must_include:
+      - "ViewRecord: { productId: string; viewedAt: number }"
+      - "ViewHistory: { userId: string; recentViews: ViewRecord[] }"
+  - section: "api_contract"
+    must_include:
+      - "GET /users/:id/recently-viewed returns ViewHistory"
+
+scoring_notes: |
+  Edge case: ambiguous task boundary. There is no single objectively correct answer
+  for which Howler owns ViewHistoryRepository — the key requirement is that EXACTLY ONE
+  Howler owns it (no conflict) and the rationale is documented.
+
+  Scoring approach (special case):
+  - Full credit: assigns ViewHistoryRepository to ONE Howler with clear rationale,
+    documents the ownership decision in CONTRACT.md, ensures howler-products does NOT
+    also create it
+  - Partial credit: assigns correctly but omits rationale in CONTRACT
+  - Zero credit: leaves ownership ambiguous (both Howlers might claim it), or
+    assigns to a non-existent new Howler without justification
+
+  The Politico integration test: a correct Gold should also note this as a boundary
+  judgment call in the Politico review section, flagging it as a high-risk seam
+  that should be confirmed before freeze.
+
+  This scenario tests whether Gold produces clear ownership decisions for ambiguous
+  join-entity cases, which is one of the hardest parts of decomposition.

@@ -24,9 +24,9 @@ Spectrum activates automatically when it detects 3+ independent features.
 
 ---
 
-## Step 2: Blue Plans (automatic)
+## Step 2: Blues Plans (automatic)
 
-Blue (the planner) scopes the work into a `PLAN.md`:
+Blues (the planner) scopes the work into a `PLAN.md`:
 
 ```
 PLAN.md written:
