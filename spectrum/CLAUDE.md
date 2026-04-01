@@ -91,7 +91,8 @@ Gold plans the spectrum. Before dropping any Howlers:
     `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts each postcondition is
     satisfied (file exists, type exports correctly, function signatures match). Commit alongside
     convoy-contracts.d.ts. Howlers run these contract tests as part of completion verification.
-    **Skip for doc-only spectrums and nano mode.**
+    **Skip for doc-only spectrums, nano mode, and reaping mode** (reaping mode uses simplified
+    contracts with no per-Howler DbC sections, so there are no postconditions to test).
 12. **Write `convoy-contracts.d.ts`** (at project root, or `src/types/convoy-contracts.d.ts` if `src/` exists) with shared TypeScript types; commit to the spectrum base branch before Howlers fork (TypeScript spectrum only; skip for doc-only spectrum runs)
 13. **Adversarial plan review (Phase 1.5 — The Passage)** — spawn a Politico (Sonnet) to challenge CONTRACT.md and MANIFEST.md before freezing. The Politico reads both artifacts and tries to find: (a) file ownership gaps (files that will be needed but aren't in the matrix), (b) contract ambiguities (underspecified interfaces that will cause seam mismatches), (c) decomposition flaws (tasks that should be sequential but are parallel, or vice versa). Gold addresses Politico's objections or documents why they're acceptable. Only freeze CONTRACT.md after Politico has no remaining blockers. Skip for reaping mode.
 14. **Present manifest + contract to human for approval** — explicitly flag high-risk seams and any Politico concerns that were accepted-with-rationale
@@ -149,6 +150,10 @@ For runs where even reaping mode overhead is excessive. Targets muster + drop in
 **Keeps (never downgrade):** File ownership tracking, HOOK.md per Howler, debrief per Howler, LESSONS.md after merge
 
 **Escalation:** If any Howler blocks, Gold upgrades to reaping mode immediately.
+
+### Multi-Candidate Mode
+
+For accuracy-critical single-Howler tasks (benchmarks, production hotfixes), Gold runs N candidates (default 3) and selects the patch with the highest test pass rate. Cost: N× single-Howler. Use for SWE-bench runs and high-stakes fixes. Not for standard multi-Howler spectrums.
 
 ### Status Roster (Mandatory — All Phases)
 
