@@ -74,6 +74,14 @@ Gold sets `"mode": "nano"` in CHECKPOINT.json and auto-approves after presenting
 
 **Mode continuum**: nano (~1 min) → reaping (~3 min) → full (~8 min). Choose based on task count, shared file modifications, and how obvious the task boundaries are.
 
+### Multi-Candidate Mode
+
+For accuracy-critical single-Howler tasks (benchmarks, production hotfixes), Gold runs N candidates (default 3) on the same task and selects the patch with the highest test pass rate. Gold sets `candidates: N` in the Howler's MANIFEST.md entry. After all N candidates complete, Gray evaluates each patch independently; the winner is selected by test pass rate (ties: fewer files modified > fewer lines changed > first to complete). Cost is N× single-Howler. Not for standard multi-Howler spectrums — only where correctness outweighs cost. See SPECTRUM-OPS.md §Multi-Candidate Mode for full details.
+
+### SWE-bench Mode
+
+For single-issue benchmark tasks, Gold uses `examples/mini-CONTRACT.md` as the contract template instead of the full CONTRACT.md — optimized for single-Howler accuracy runs. See SPECTRUM-OPS.md §SWE-bench Mode and `evaluation/swe-bench-prep/pipeline-design.md` for variant specs.
+
 ---
 
 ## The Architecture
@@ -353,6 +361,11 @@ This eliminates the "howler-2 assumed something howler-1 didn't build" failure m
 
 **CONTRACT.md is frozen at dispatch.** If a Howler discovers the contract is wrong, set `Status: blocked` in HOOK.md and describe the needed change. Gold re-runs muster with the updated contract. Howlers never modify CONTRACT.md directly.
 
+**Additional CONTRACT.md content (full spectrum runs):**
+
+- **Per-Howler `## Codebase Context` section** — Gold reads each file in the Howler's MODIFIES list and summarizes existing function signatures, patterns in use, and gotchas (5–15 lines per file). For Howlers with CREATES-only file lists, write `## Codebase Context: N/A (all new files)`. Gold MAY use `tools/codebase_index.py` to generate this automatically. See SPECTRUM-OPS.md §Phase 1: Muster for the full prompt and tool usage.
+- **Per-Howler `## Test Impact Map` section** — output of `python3 tools/test_impact_map.py --files {MODIFIES+CREATES} --root {project_root}` — which test files cover the Howler's owned files. Howlers run only these tests during completion verification.
+
 ### 1.3a Compiler-Enforced Contracts (TypeScript Spectrum Runs)
 
 For TypeScript spectrum runs, Gold generates a shared declarations file during muster and commits it to the spectrum base branch **before** Howlers fork their worktrees.
@@ -403,6 +416,18 @@ export interface AuthResponse {
 4. Howlers fork from this commit, so the contracts file is present from the start
 5. Add a reference in CONTRACT.md under "Shared Types": `Source of truth: convoy-contracts.d.ts`
 
+### 1.3b White Pre-Check (Contract Accuracy Gate)
+
+After writing CONTRACT.md, before freezing it, Gold drops a White with a pre-freeze accuracy prompt. White checks: (a) do all MODIFIES files actually exist? (b) do documented function signatures and types match the actual codebase? (c) are any interface names or constants referenced in the contract missing from the codebase? White reports STALE / MISSING / MISMATCH findings only — not style observations. Gold patches CONTRACT.md to fix all findings; unverifiable items are documented as `[ASSUMPTION: unverifiable, reason]`.
+
+**Skip for reaping mode and nano mode.** See SPECTRUM-OPS.md §Phase 1: Muster (step 11) for the full White prompt.
+
+### 1.3c Contract-to-Test Generation (TypeScript/Python Runs)
+
+For each Howler with postconditions in CONTRACT.md, Gold generates a stub test file at `tests/spectrum/<howler-name>.contract.test.{ts|py}` that asserts each postcondition is satisfied (file exists, type exports correctly, function signatures match). These are committed alongside `convoy-contracts.d.ts` before Howlers fork. Howlers run these contract tests as part of completion verification (step 8 in the dispatch template).
+
+**Skip for doc-only spectrums, nano mode, and reaping mode** (reaping mode uses simplified contracts with no per-Howler DbC sections, so there are no postconditions to test). See SPECTRUM-OPS.md §Phase 1: Muster (step 12) for example stubs.
+
 ### 1.4 Adversarial Plan Review (Phase 1.5)
 
 Before freezing CONTRACT.md, Gold spawns a **Politicos** agent (Sonnet) to adversarially review the plan. Politico is a separate agent — not Gold reviewing its own work — to avoid confirmation bias.
@@ -449,8 +474,12 @@ Present to the human:
 - [ ] `convoy-contracts.d.ts` committed to base branch (TypeScript spectrum runs only)
 - [ ] Every Howler has Preconditions, Postconditions, and Invariants in CONTRACT.md (full DbC for interface-heavy; conventions-only for pure-create)
 - [ ] Every checkpoint dep in the DAG corresponds to a checkpoint name defined in the contract
-- [ ] `LESSONS.md` read if present at `~/.claude/projects/<project-slug>/memory/LESSONS.md` — past mistakes incorporated into this decomposition
+- [ ] `LESSONS.md` read if present at `~/.claude/projects/<project-slug>/memory/LESSONS.md` — past mistakes incorporated into this decomposition. If a `## Known Failure Patterns` section exists, relevant patterns injected into Howler drop prompts as `KNOWN RISKS`.
 - [ ] ARCHITECTURE.md updated (persistent, incremental — not regenerated)
+- [ ] Test impact map generated per Howler and included in CONTRACT.md (run `tools/test_impact_map.py`; skip for nano/reaping)
+- [ ] Codebase context sections written in CONTRACT.md for each Howler's MODIFIES files (5–15 lines per file; skip for CREATES-only Howlers and nano/reaping)
+- [ ] White Pre-Check completed — all STALE/MISSING/MISMATCH findings patched or documented as `[ASSUMPTION]` (skip for reaping mode and nano mode)
+- [ ] Contract test stubs generated and committed for each Howler with postconditions (skip for doc-only, nano mode, and reaping mode)
 
 **Do not spawn Howlers until the human confirms.**
 
@@ -509,7 +538,7 @@ Gold MUST print a status roster inline in the conversation at every phase transi
 **Rules:**
 - Include ALL agents — Blues, Whites, Grays, Coppers, Obsidians, Browns — not just Howlers
 - Show task in parentheses for Howlers, dependency waits for pending ones
-- Show each quality gate agent (White + Gray + /diff-review) per Howler during The Proving
+- Show each quality gate agent (White + Gray + /diff-review) per Howler during the per-Howler quality gate (part of Phase 2: The Drop)
 - One line per agent, compact
 
 ---
@@ -560,7 +589,12 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
-  0. Read CONTRACT.md at the path above FIRST. This is your source of truth.
+  0. Read CONTRACT.md at the path above FIRST. Pay special attention to:
+     - Your per-Howler `## Codebase Context` section (existing patterns you must follow)
+     - Your per-Howler `## Test Impact Map` section (which tests to run)
+     - Your preconditions/postconditions and shared types
+     This is your source of truth. Do not re-derive patterns from the codebase if
+     CONTRACT.md has already captured them — use what Gold documented.
   1. Write HOOK.md in worktree root IMMEDIATELY (before any implementation).
   2. Update HOOK.md as you progress -- decisions, seams, blockers, errors.
   3. Follow CONTRACT.md exactly. If the contract is wrong, set Status: blocked
@@ -580,17 +614,42 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
      - Every file in CREATES exists: ls -la {each file}
      - Every file in MODIFIES has been changed: git diff --name-only
      - For TypeScript: tsc --noEmit passes
-     - For tests: test runner passes on your files
+     - For tests: run the test files listed in your ## Test Impact Map (from CONTRACT.md).
+       If no map was provided, run tests on your owned files. Tests must pass.
+     - Contract tests: run tests/spectrum/{howler-name}.contract.test.{ts|py} if present.
+       All must pass before quality gates.
      Write results in HOOK.md under '## Completion Verification'.
-  9. When verified: run White + Gray + /diff-review in parallel (triple gate).
+  9. ISSUE RE-READ: After mechanical verification, re-read the original Task above
+     (the full task description, not just the file list). Write a 3–5 line assessment
+     in HOOK.md under '## Issue Re-Read':
+       - "Does my implementation resolve the stated problem end-to-end?"
+       - "What edge cases does the task imply that I may not have handled?"
+       - "Is there anything in the task description I deprioritized?"
+     If you identify a gap, fix it before moving to quality gates.
+     If no gaps: write "Issue re-read: no gaps identified." and proceed.
+  10. REVISION PASS: If completion verification or contract tests revealed failures:
+     - Read the test output and error messages carefully
+     - Identify the root cause (not just the symptom)
+     - Fix the issue and re-run the failing tests
+     - Update HOOK.md with what you fixed and why
+     Maximum 2 revision passes. If tests still fail after 2 passes, proceed to
+     quality gates and document the failures — White/Gray will catch them.
+     If all tests passed on first try: skip this step.
+  11. When verified: run White + Gray + /diff-review in parallel (triple gate).
      Security criticals block. High/medium = warnings in PR description.
-  10. Fix any blockers from review. If blockers were fixed, re-run White before
+  12. Fix any blockers from review. If blockers were fixed, re-run White before
      proceeding (max 2 Orange retries total, then set Status: blocked).
-  11. Write debrief entry to ~/.claude/spectrum/{rain-id}/{howler-name}.md
-  12. Open a PR via Copper targeting main. Never push directly to main.
+  13. Write debrief entry to ~/.claude/spectrum/{rain-id}/{howler-name}.md
+  14. Open a PR via Copper targeting main. Never push directly to main.
 
   DISCOVERY RELAY (if provided):
-  {compressed_findings from previously-completed Howlers — ~500 tokens max}
+  {compressed_findings from previously-completed Howlers — ~500 tokens max.
+   Use these as context but do NOT depend on them for correctness.
+   Your CONTRACT.md is the source of truth, not relay content.}
+
+  KNOWN RISKS (from prior spectrums — if any match this task type):
+  {Gold injects 0-3 relevant failure patterns from LESSONS.md ## Known Failure Patterns.
+   If none match, omit this section.}
 ")
 ```
 
@@ -1405,6 +1464,7 @@ Agent(model="haiku", subagent_type="browns", prompt="
   - Decomposition Patterns (what worked, what caused friction)
   - Contract Friction (amendments filed, types that were wrong)
   - Failure Modes (failures by type, loci, recovery actions taken)
+  - Known Failure Patterns (structured patterns for Gold to inject into future Howler drop prompts — format: pattern name, trigger condition, fix)
   - Timing (per-Howler duration, critical path, total wall time)
   - Obsidian Results (spec compliance summary)
   - Recommendations (actionable items for next spectrum run on this project)
@@ -1452,6 +1512,12 @@ What caused friction:
 - howler-ui: `transient` failure (context limit) — resumed successfully from HOOK.md checkpoint
 - No structural or conflict failures in this spectrum run
 
+### Known Failure Patterns
+
+- **Pattern**: Clerk context not initialized before middleware runs  
+  **Trigger**: Next.js 16 proxy config + Clerk middleware  
+  **Fix**: Ensure `clerkMiddleware()` wraps the entire handler, not just the protected routes
+
 ### Timing
 
 - howler-auth: 45 min (critical path — types checkpoint blocked howler-api until 20 min in)
@@ -1472,7 +1538,7 @@ LESSONS.md feeds back into the next spectrum run's muster. Both Blue and Gold mu
 
 **Gold muster checklist addition:**
 
-> Before writing CONTRACT.md, read `~/.claude/projects/<project-slug>/memory/LESSONS.md` if present. Check `Contract Friction` entries for types that were wrong in prior spectrum runs and ensure those are more precisely specified this time. Check `Decomposition Patterns` for task boundaries that caused friction — adjust the ownership matrix accordingly.
+> Before writing CONTRACT.md, read `~/.claude/projects/<project-slug>/memory/LESSONS.md` if present. Check `Contract Friction` entries for types that were wrong in prior spectrum runs and ensure those are more precisely specified this time. Check `Decomposition Patterns` for task boundaries that caused friction — adjust the ownership matrix accordingly. If a `## Known Failure Patterns` section exists, scan for patterns matching the current spectrum's task types and inject relevant ones into each Howler's drop prompt under `KNOWN RISKS`.
 
 **Blue planning checklist addition:**
 

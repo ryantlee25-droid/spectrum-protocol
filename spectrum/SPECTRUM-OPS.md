@@ -134,12 +134,23 @@ Spectrum activates when ALL are true:
         "per_howler": {}
       },
       "merge_reflections": [],
+      "locus_history": {},
+      "circuit_breaker_state": {},
+      "active_diagnostics": [],
+      "gold_context_snapshot": {
+        "last_phase": "dispatching",
+        "pending_dag_edges": [],
+        "manifest_path": "~/.claude/spectrum/{rain-id}/MANIFEST.md",
+        "contract_path": "~/.claude/spectrum/{rain-id}/CONTRACT.md"
+      },
       "created_at": "ISO timestamp",
       "resumed_at": null
     }
     ```
     Valid phases: `planning`, `approved`, `dispatching`, `running`, `integrating`, `merging`, `complete`
     Valid howler statuses: `pending`, `dispatching`, `running`, `blocked`, `complete`, `failed`, `auto-skipped`
+
+    **Gold MUST update `locus_history` and `circuit_breaker_state` after every failure classification** (not just at phase transitions) so a new Gold session can reconstruct circuit breaker state on recovery.
 
     **Budget tracking**: If `budget_limit` is set (in tokens or USD), the Gold checks cumulative cost before dropping each new Howler. If the Spectrum is projected to exceed budget, the Gold presents options to the human: continue, skip remaining Howlers, or abort. Token counts are logged per Howler from the Agent tool's usage output.
 
@@ -351,7 +362,7 @@ Gold MUST print a status roster inline in the conversation at every phase transi
 1. After muster approval (shows full roster with all agents pending)
 2. After each Howler dispatch (update dispatched agent to `●`)
 3. After each agent completion or failure (update to `✓` or `✗`)
-4. At phase transitions (Muster → Drop → Proving → Forge → Pax → Triumph)
+4. At phase transitions (Muster → Drop → Forge → Pax → Merge → Triumph)
 5. When the user asks for status
 
 **Rules:**
@@ -437,11 +448,11 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
      - Every file in CREATES exists: ls -la {each file}
      - Every file in MODIFIES has been changed: git diff --name-only
      - For TypeScript (if node_modules exists): tsc --noEmit passes
-       (Skip if node_modules not installed — type checking defers to The Proving)
+       (Skip if node_modules not installed — type checking defers to the quality gate)
      - For tests (if test framework installed): run the specific test files listed in your
        ## Test Impact Map (from CONTRACT.md). If no map was provided, run tests on your owned
        files. Tests must pass; coverage gaps are warnings, not blockers.
-       (Skip if dependencies not installed — testing defers to The Proving)
+       (Skip if dependencies not installed — testing defers to the quality gate)
      - Contract tests: run `tests/spectrum/{howler-name}.contract.test.{ts|py}` — these verify
        your CONTRACT.md postconditions are satisfied. All must pass before quality gates.
      - Postcondition verification (if CONTRACT.md has DbC for this Howler):
@@ -763,6 +774,8 @@ Evaluate whether CONTRACT.md and MANIFEST.md can be expressed as Lead context + 
 
 **Persistence:**
 - CHECKPOINT.json updated at every phase transition (with budget tracking)
+- CHECKPOINT.json persists `locus_history` and `circuit_breaker_state` (not just phase/howler status)
+- Gold recovery from session death: read CHECKPOINT.json + MANIFEST.md + all HOOK.md files to reconstruct state
 - ARCHITECTURE.md persistent and incremental (never regenerated)
 - LESSONS.md written after every successful Spectrum
 - ENTITIES.md curated after every Spectrum
@@ -773,6 +786,25 @@ Evaluate whether CONTRACT.md and MANIFEST.md can be expressed as Lead context + 
 - Reaping mode: 3-4 pure-create Howlers, ~3 min muster
 - Incremental integration testing during merge (3+ PRs)
 - Obsidian verification before LESSONS.md (skip in reaping mode)
+
+---
+
+## Gold Recovery (Session Death)
+
+If Gold's session dies mid-spectrum (context limit, crash, network), a new Gold session recovers by:
+
+1. Read CHECKPOINT.json — determine current phase and Howler statuses
+2. Read MANIFEST.md — reconstruct the DAG and file ownership
+3. Read CONTRACT.md — reconstruct shared interfaces
+4. Read each Howler's HOOK.md — determine per-agent progress
+5. Read `locus_history` from CHECKPOINT.json — reconstruct circuit breaker state
+6. Resume from the current phase:
+   - If `phase=dispatching`: check which Howlers haven't been dropped yet, drop them
+   - If `phase=running`: wait for in-flight Howlers (they persist via HOOK.md)
+   - If `phase=integrating`: read debriefs, proceed to Pax
+   - If `phase=merging`: check which PRs are merged, continue merge sequence
+
+Gold MUST update CHECKPOINT.json with `locus_history` and `circuit_breaker_state` after every failure classification, not just at phase transitions.
 
 ---
 
