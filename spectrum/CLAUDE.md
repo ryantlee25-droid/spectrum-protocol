@@ -117,6 +117,27 @@ For small spectrum runs where full muster ceremony (~8 min) exceeds the actual w
 
 **Escalation:** If any Howler sets `Status: blocked` during reaping mode, Gold may upgrade to full spectrum mode (write full MANIFEST.md + CONTRACT.md) if the blocker suggests the tasks were not as independent as assumed.
 
+### Nano Mode (2-3 Howlers, Pure-Create, Obvious Boundaries)
+
+For runs where even reaping mode overhead is excessive. Targets muster + drop in under 1 minute.
+
+**Activation criteria (all must be true):**
+- 2-3 Howlers maximum
+- All Howlers only CREATE new files (no MODIFIES)
+- No shared interfaces between Howlers
+- Task boundaries are obvious — human or Gold judges without analysis
+
+**In nano mode, Gold writes:**
+- **NANO-MANIFEST.md** — task list + file ownership only (no CONTRACT.md, no DAG)
+- **CHECKPOINT.json** — always required, includes `"mode": "nano"`
+- **Auto-approves** — presents manifest and drops Howlers immediately, no human confirmation gate
+
+**Skips:** CONTRACT.md, Politico, ARCHITECTURE.md, Obsidian, ENTITIES.md, human approval gate, White + Gray + /diff-review, worktree pre-creation
+
+**Keeps (never downgrade):** File ownership tracking, HOOK.md per Howler, debrief per Howler, LESSONS.md after merge
+
+**Escalation:** If any Howler blocks, Gold upgrades to reaping mode immediately.
+
 ### Status Roster (Mandatory — All Phases)
 
 Gold MUST print a status roster inline after every dispatch, completion, and phase transition. This is the user's primary visibility into the spectrum. Format: one line per agent with glyph, name, role, status symbol (`●` running, `✓` done, `✗` failed, `■` blocked, `○` pending), and task context. Include ALL agents (Blues, Whites, Grays, Coppers, Obsidians, Browns) — not just Howlers. See SPECTRUM-OPS.md for full format.

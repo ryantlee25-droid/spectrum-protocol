@@ -64,7 +64,15 @@ For single tasks, sequential work, or simple requests: route directly to the app
 
 For small spectrum runs (3-4 Howlers, all pure-create, no shared interfaces), use Reaping Mode to reduce muster from ~8 minutes to ~3 minutes. Reaping mode skips ARCHITECTURE.md, full DAG YAML, per-Howler Design-by-Contract, Obsidian, and ENTITIES.md — but never downgrades quality gates (White + Gray + /diff-review), HOOK.md, debriefs, or worktree pre-creation. See SPECTRUM-OPS.md for the full reaping mode procedure.
 
-Gold sets `"mode": "light"` in CHECKPOINT.json. If a Howler blocks during reaping mode, Gold may escalate to full spectrum mode.
+Gold sets `"mode": "reaping"` in CHECKPOINT.json. If a Howler blocks during reaping mode, Gold may escalate to full spectrum mode.
+
+### Nano Mode
+
+For 2-3 Howler runs with obvious task boundaries, use Nano Mode to reduce muster to under 1 minute. Nano mode skips CONTRACT.md, Politico, ARCHITECTURE.md, Obsidian, ENTITIES.md, the human approval gate, and all quality gates (Howlers self-verify only). Howlers create their own branches — no pre-created worktrees. The one non-negotiable: file ownership tracking (without it, nano mode is indistinguishable from uncoordinated parallel execution).
+
+Gold sets `"mode": "nano"` in CHECKPOINT.json and auto-approves after presenting NANO-MANIFEST.md. If any Howler blocks, Gold escalates to reaping mode immediately. See SPECTRUM-OPS.md for the full nano mode procedure.
+
+**Mode continuum**: nano (~1 min) → reaping (~3 min) → full (~8 min). Choose based on task count, shared file modifications, and how obvious the task boundaries are.
 
 ---
 
@@ -546,9 +554,13 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
     {deps list from MANIFEST.md DAG node — howler-name or howler-name#types}
 
   CONTRACT (frozen -- do not modify, block if wrong):
-  {full contents of CONTRACT.md}
+  Read ~/.claude/spectrum/{rain-id}/CONTRACT.md before starting.
+  Do NOT modify this file. If the contract is wrong, set Status: blocked.
+  # Token note: CONTRACT.md is referenced by path, not inlined. For a 5-Howler run
+  # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
+  0. Read CONTRACT.md at the path above FIRST. This is your source of truth.
   1. Write HOOK.md in worktree root IMMEDIATELY (before any implementation).
   2. Update HOOK.md as you progress -- decisions, seams, blockers, errors.
   3. Follow CONTRACT.md exactly. If the contract is wrong, set Status: blocked
@@ -582,7 +594,7 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
 ")
 ```
 
-Gold fills in every `{placeholder}` from MANIFEST.md and CONTRACT.md. No improvisation -- the template ensures every Howler receives identical structure.
+Gold fills in every `{placeholder}` from MANIFEST.md. CONTRACT.md is referenced by path — Howlers read it as their first action. No improvisation -- the template ensures every Howler receives identical structure.
 
 ### 2.1a Post-Dispatch Worktree Verification
 

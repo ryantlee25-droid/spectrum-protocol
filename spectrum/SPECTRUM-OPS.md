@@ -178,6 +178,46 @@ Gold notes `"mode": "reaping"` in CHECKPOINT.json. Lessons are still recorded.
 
 ---
 
+## Nano Mode
+
+For 2-3 Howler runs with obvious task boundaries where even reaping mode overhead (~3 min) is excessive. Targets muster + drop in under 1 minute.
+
+**Activation** (all must be true):
+- 2-3 Howlers maximum
+- All Howlers only CREATE new files (no MODIFIES)
+- No shared interfaces between Howlers
+- Task boundaries are obvious — human or Gold judges without analysis
+
+**Muster (~1 min):**
+
+1. Generate rain ID
+2. Create Spectrum directory
+3. Write **NANO-MANIFEST.md** — task list + file ownership only:
+   ```markdown
+   # Nano Manifest: <rain-id>
+   Mode: nano
+
+   | Howler | Creates |
+   |--------|---------|
+   | howler-a | file1.md, file2.md |
+   | howler-b | file3.md, file4.md |
+
+   CONFLICTS: none (pure-create, verified)
+   ```
+4. Write **CHECKPOINT.json** with `"mode": "nano"`
+5. **Auto-approve** — Gold presents the manifest and drops Howlers immediately. No human confirmation gate.
+6. Howlers create their own branches (no pre-created worktrees)
+
+**What stays the same:** File ownership tracking, HOOK.md per Howler, debrief per Howler, LESSONS.md after merge
+
+**What's skipped:** CONTRACT.md, Politico, ARCHITECTURE.md, Obsidian, ENTITIES.md, human approval gate, White + Gray + /diff-review (Howlers self-verify only), worktree pre-creation
+
+**Escalation:** If any Howler blocks, Gold upgrades to reaping mode immediately. Nano mode has no structural recovery path.
+
+**Self-verify (nano Howlers only):** Before declaring done, run `ls` to confirm all created files exist and write a one-line completion note in HOOK.md. No type checks or test runner required unless the created files include test infrastructure.
+
+---
+
 ## Status Roster (Mandatory — All Phases)
 
 Gold MUST print a status roster inline in the conversation at every phase transition and after each agent dispatch or completion. This is the user's primary visibility into which agents are running.
@@ -269,9 +309,13 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   Dependencies: {deps from DAG}
 
   CONTRACT (frozen -- block if wrong):
-  {CONTRACT.md contents}
+  Read ~/.claude/spectrum/{rain-id}/CONTRACT.md before starting.
+  Do NOT modify this file. If the contract is wrong, set Status: blocked.
+  # Token note: CONTRACT.md is referenced by path, not inlined. For a 5-Howler run
+  # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
+  0. Read CONTRACT.md at the path above FIRST. This is your source of truth.
   1. Write HOOK.md immediately (before any code).
   2. Update HOOK.md continuously -- decisions, seams, blockers, errors.
   3. Follow CONTRACT exactly. If wrong: Status: blocked, describe why.
