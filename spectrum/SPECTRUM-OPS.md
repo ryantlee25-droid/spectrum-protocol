@@ -47,20 +47,45 @@ Spectrum activates when ALL are true:
    - Is any task significantly larger than peers? → Flag with `effort: L`
    - Document reasoning: "I chose N Howlers because X. Alternative: M Howlers, rejected because Y."
 9. Write **MANIFEST.md** (tasks with `effort: S/M/L` + `serial_risk: yes/no`, DAG with base_branch/base_commit, file ownership matrix)
-10. Write **CONTRACT.md** (shared types, Design-by-Contract per Howler — full DbC for interface-heavy Howlers, conventions-only for pure-create Howlers)
-11. For TypeScript: commit `convoy-contracts.d.ts` to base branch
-12. **Adversarial plan review (Phase 1.5: The Passage)** — drop Politico (Sonnet) with:
+10. Write **CONTRACT.md** with:
+    - Shared types, interfaces, constants that multiple Howlers depend on
+    - Naming conventions and patterns Howlers must follow
+    - Per-Howler `## Codebase Context` section: Gold reads each file in the Howler's MODIFIES list and summarizes existing function signatures relevant to the task, patterns in use (e.g., "uses factory pattern", "all exports are named, not default"), and any gotchas observed (e.g., "this file has a circular import with X — avoid touching the import block"). Keep summaries to 5–15 lines per file. For Howlers with no MODIFIES files (all CREATES): write `## Codebase Context: N/A (all new files)`.
+    - Integration points (what connects to what)
+    - Design-by-Contract per Howler — full DbC for interface-heavy Howlers, conventions-only for pure-create Howlers
+    - Test impact map per Howler: output of `python3 tools/test_impact_map.py --files {MODIFIES+CREATES} --root {project_root}` — which test files cover the Howler's owned files
+11. **Pre-freeze contract check (White Pre-Check)** — after writing CONTRACT.md, before freezing
+    it, drop a White with this prompt:
+    ```
+    "Read CONTRACT.md for Spectrum {id}. You are doing a pre-freeze accuracy check against the
+    actual codebase. Check: (a) do all files listed in MODIFIES actually exist? (b) do the
+    function signatures and types documented in each Howler's Codebase Context section match what
+    is actually in those files? (c) are there any interface names or constants referenced in the
+    contract that don't exist in the codebase? Report mismatches only — not style observations.
+    Flag each as: STALE (contract references something that changed), MISSING (file/type doesn't
+    exist), or MISMATCH (documented signature differs from actual). Skip for files in CREATES
+    (they don't exist yet by design)."
+    ```
+    Gold patches CONTRACT.md to fix all STALE, MISSING, and MISMATCH findings before proceeding.
+    For each finding that cannot be fixed (e.g., a file genuinely needs to be created as a
+    precondition), document it as an `[ASSUMPTION: unverifiable, reason]` in CONTRACT.md.
+    **Skip for reaping mode and nano mode.**
+12. For TypeScript: commit `convoy-contracts.d.ts` to base branch
+13. **Adversarial plan review (Phase 1.5: The Passage)** — drop Politico (Sonnet) with:
     ```
     "Read MANIFEST.md and CONTRACT.md for Spectrum {id}. You are the adversary.
     Find: (a) file ownership gaps — files needed but missing from the matrix,
     (b) contract ambiguities — underspecified interfaces that will cause seam
     mismatches, (c) decomposition flaws — tasks that should be sequential but
     are parallel, or vice versa. Report blockers (must fix), warnings (should
-    fix), and observations (FYI). Be specific — name files and interfaces."
+    fix), and observations (FYI). Be specific — name files and interfaces.
+    Note: the White Pre-Check (step 11) has already validated factual accuracy of CONTRACT.md
+    against the codebase. Your role is adversarial review of the *decomposition logic and
+    interface design*, not re-checking file existence."
     ```
     Gold addresses Politico's blockers before freezing CONTRACT.md. Warnings are documented in MANIFEST.md. **Skip for reaping mode.**
-13. Present to human → explicitly flag high-risk seams + Politico concerns accepted-with-rationale → **do not drop until confirmed**
-14. Write initial **CHECKPOINT.json** with schema:
+14. Present to human → explicitly flag high-risk seams + Politico concerns accepted-with-rationale → **do not drop until confirmed**
+15. Write initial **CHECKPOINT.json** with schema:
     ```json
     {
       "rain_id": "...",
@@ -92,6 +117,9 @@ Spectrum activates when ALL are true:
 - [ ] Every Howler has Preconditions/Postconditions/Invariants (full DbC for interface-heavy; conventions-only for pure-create)
 - [ ] Every checkpoint dep name exists in the contract
 - [ ] LESSONS.md + ENTITIES.md incorporated
+- [ ] Test impact map generated for each Howler's MODIFIES/CREATES files (run tools/test_impact_map.py; include output in CONTRACT.md per Howler)
+- [ ] Codebase context sections written in CONTRACT.md for each Howler's MODIFIES files (existing function signatures, patterns, gotchas — 5-15 lines per file)
+- [ ] White Pre-Check completed — all STALE/MISSING/MISMATCH findings patched or documented as ASSUMPTION in CONTRACT.md (skip for reaping mode and nano mode)
 - [ ] Adversarial Politico review completed (blockers addressed, warnings documented) — skip for reaping mode
 - [ ] High-risk seams and accepted Politico concerns flagged for human review
 - [ ] ARCHITECTURE.md updated (persistent, incremental — never regenerated)
@@ -315,7 +343,12 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
-  0. Read CONTRACT.md at the path above FIRST. This is your source of truth.
+  0. Read CONTRACT.md at the path above FIRST. Pay special attention to:
+     - Your per-Howler `## Codebase Context` section (existing patterns you must follow)
+     - Your preconditions/postconditions
+     - Shared types and interfaces
+     This is your source of truth. Do not re-derive patterns from the codebase if
+     CONTRACT.md has already captured them — use what Gold documented.
   1. Write HOOK.md immediately (before any code).
   2. Update HOOK.md continuously -- decisions, seams, blockers, errors.
   3. Follow CONTRACT exactly. If wrong: Status: blocked, describe why.
@@ -332,9 +365,19 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
      - Every file in MODIFIES has been changed: git diff --name-only
      - For TypeScript (if node_modules exists): tsc --noEmit passes
        (Skip if node_modules not installed — type checking defers to The Proving)
-     - For tests (if test framework installed): test runner passes on your files
+     - For tests (if test framework installed): run the specific test files listed in your
+       ## Test Impact Map (from CONTRACT.md). If no map was provided, run tests on your owned
+       files. Tests must pass; coverage gaps are warnings, not blockers.
        (Skip if dependencies not installed — testing defers to The Proving)
      Write verification results in HOOK.md under '## Completion Verification'.
+  8b. ISSUE RE-READ: After mechanical verification, re-read the original Task
+      above (not just the file list — the full task description). Write a 3–5
+      line assessment in HOOK.md under '## Issue Re-Read':
+        - "Does my implementation resolve the stated problem end-to-end?"
+        - "What edge cases does the task imply that I may not have handled?"
+        - "Is there anything in the task description I deprioritized?"
+      If you identify a gap, fix it before moving to step 9 (quality gates).
+      If no gaps: write "Issue re-read: no gaps identified." and proceed.
   9. When verified: run White + Gray + /diff-review in parallel (triple gate).
      Security criticals from /diff-review block the PR. High/medium = warning.
   10. Fix blockers. If blockers fixed, re-run White before proceeding.
@@ -391,6 +434,10 @@ MODIFIES: {files}
 - [ ] All MODIFIES files changed: {git diff --name-only results}
 - [ ] Type check passes: {tsc --noEmit or N/A}
 - [ ] Tests pass on owned files: {test results or N/A}
+
+## Issue Re-Read
+- [ ] Re-read original task
+- Assessment: {3-5 line correctness assessment or "no gaps identified"}
 
 ## Blockers
 - (none)
@@ -591,6 +638,7 @@ Evaluate whether CONTRACT.md and MANIFEST.md can be expressed as Lead context + 
 - Reflexion check every 5 file writes (re-read scope, stop if drifted)
 - Scope alignment check every 20 tool calls (re-read task + CONTRACT.md, log alignment)
 - Completion verification is mechanical (ls, git diff, tsc, tests) before declaring done
+- Issue re-read mandatory after completion verification — correctness assessment before quality gates
 - Heartbeat every 30 tool calls or 1 hour — 4+ hours without update = stuck escalation
 
 **Quality & Recovery:**

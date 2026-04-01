@@ -78,14 +78,20 @@ Gold plans the spectrum. Before dropping any Howlers:
 9. **Write CONTRACT.md** to the spectrum directory with:
    - Shared types, interfaces, constants that multiple Howlers depend on
    - Naming conventions and patterns Howlers must follow
+   - Per-Howler codebase context: Gold reads each MODIFIES file and summarizes key patterns,
+     function signatures, and gotchas (5–15 lines per file; skip for newly CREATED files)
    - Integration points (what connects to what)
    - Preconditions, postconditions, and invariants per Howler (full DbC for interface-heavy Howlers; conventions-only for pure-create Howlers)
-10. **Write `convoy-contracts.d.ts`** (at project root, or `src/types/convoy-contracts.d.ts` if `src/` exists) with shared TypeScript types; commit to the spectrum base branch before Howlers fork (TypeScript spectrum only; skip for doc-only spectrum runs)
-11. **Adversarial plan review (Phase 1.5 — The Passage)** — spawn a Politico (Sonnet) to challenge CONTRACT.md and MANIFEST.md before freezing. The Politico reads both artifacts and tries to find: (a) file ownership gaps (files that will be needed but aren't in the matrix), (b) contract ambiguities (underspecified interfaces that will cause seam mismatches), (c) decomposition flaws (tasks that should be sequential but are parallel, or vice versa). Gold addresses Politico's objections or documents why they're acceptable. Only freeze CONTRACT.md after Politico has no remaining blockers. Skip for reaping mode.
-12. **Present manifest + contract to human for approval** — explicitly flag high-risk seams and any Politico concerns that were accepted-with-rationale
-13. **Do not drop Howlers until confirmed.**
-14. **Write initial CHECKPOINT.json** (phase: approved, all howlers pending) with defined schema: `rain_id`, `phase` (enum: planning/approved/dispatching/running/integrating/merging/complete), `mode` (full/reaping), `howlers` (array of `{name, status, branch, worktree_path}`), `errors` (array), `resumed_at` (optional)
-15. **Pre-create all worktrees** (post-approval, before drop):
+   - Test impact map per Howler (run `tools/test_impact_map.py`; include in CONTRACT.md)
+10. **White Pre-Check** — after writing CONTRACT.md, before freezing: drop White to verify all
+    referenced files exist and documented signatures match the actual codebase. Gold patches
+    CONTRACT.md based on findings. Skip for reaping mode and nano mode.
+11. **Write `convoy-contracts.d.ts`** (at project root, or `src/types/convoy-contracts.d.ts` if `src/` exists) with shared TypeScript types; commit to the spectrum base branch before Howlers fork (TypeScript spectrum only; skip for doc-only spectrum runs)
+12. **Adversarial plan review (Phase 1.5 — The Passage)** — spawn a Politico (Sonnet) to challenge CONTRACT.md and MANIFEST.md before freezing. The Politico reads both artifacts and tries to find: (a) file ownership gaps (files that will be needed but aren't in the matrix), (b) contract ambiguities (underspecified interfaces that will cause seam mismatches), (c) decomposition flaws (tasks that should be sequential but are parallel, or vice versa). Gold addresses Politico's objections or documents why they're acceptable. Only freeze CONTRACT.md after Politico has no remaining blockers. Skip for reaping mode.
+13. **Present manifest + contract to human for approval** — explicitly flag high-risk seams and any Politico concerns that were accepted-with-rationale
+14. **Do not drop Howlers until confirmed.**
+15. **Write initial CHECKPOINT.json** (phase: approved, all howlers pending) with defined schema: `rain_id`, `phase` (enum: planning/approved/dispatching/running/integrating/merging/complete), `mode` (full/reaping), `howlers` (array of `{name, status, branch, worktree_path}`), `errors` (array), `resumed_at` (optional)
+16. **Pre-create all worktrees** (post-approval, before drop):
     ```bash
     git worktree add -b spectrum/<id>/<howler-name> \
       ~/.claude/spectrum/<id>/worktrees/<howler-name> <base_commit>
@@ -155,6 +161,8 @@ Drop Howlers per DAG — drop each Howler when all its deps are satisfied. Check
 **Howler execution rules** (in addition to CONTRACT.md):
 - **Scope alignment check**: Every 20 tool calls, Howler re-reads original task + CONTRACT.md and writes `Alignment: on-track` or `Alignment: drifted — [reason]` in HOOK.md. If drifted, STOP and correct.
 - **Completion verification**: Before declaring done, mechanically verify: all CREATES files exist (`ls`), all MODIFIES changed (`git diff --name-only`), type checks pass (`tsc --noEmit`), tests pass. Write results in HOOK.md `## Completion Verification`.
+- **Issue re-read**: After completion verification, Howler re-reads the original task and writes a
+  3–5 line correctness assessment in HOOK.md. If a gap is found, fix before quality gates.
 
 ### Phase 3 — The Proving (Per Howler)
 
