@@ -120,9 +120,10 @@ Howler  Howler    Howler    Howler
   | b. Implements the task
   | c. Updates HOOK.md continuously (decisions, seams, blockers)
   | d. Marks type checkpoints STABLE when interfaces are finalized
-  | e. Runs White + Gray in parallel (quality gate)
+  | e. Runs completion verification + revision passes (self-check only)
   | f. Writes debrief entry with YAML frontmatter (handoff manifest)
-  | g. Opens a PR via Copper
+  | g. Sets Status: complete in HOOK.md and returns to Gold
+  |    (Gold spawns White + Gray + /diff-review, then Copper)
   |
   +--------+---------+---------+
   |
@@ -613,34 +614,47 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   8. COMPLETION VERIFICATION: Before declaring done, verify mechanically:
      - Every file in CREATES exists: ls -la {each file}
      - Every file in MODIFIES has been changed: git diff --name-only
-     - For TypeScript: tsc --noEmit passes
-     - For tests: run the test files listed in your ## Test Impact Map (from CONTRACT.md).
-       If no map was provided, run tests on your owned files. Tests must pass.
+     - For TypeScript (if node_modules exists): tsc --noEmit passes
+       (Skip if node_modules not installed — type checking defers to the quality gate)
+     - For tests (if test framework installed): run the specific test files listed in your
+       ## Test Impact Map (from CONTRACT.md). If no map was provided, run tests on your owned
+       files. Tests must pass; coverage gaps are warnings, not blockers.
+       For files marked [none-found] in the impact map, run the full test suite.
+       (Skip if dependencies not installed — testing defers to the quality gate)
      - Contract tests: run tests/spectrum/{howler-name}.contract.test.{ts|py} if present.
-       All must pass before quality gates.
+       All must pass before writing debrief.
+     - Postcondition verification (if CONTRACT.md has DbC for this Howler):
+       run `python3 tools/verify_postconditions.py --contract {path} --howler {name} --root {project}`
+       All postconditions must pass. Failures are blockers.
      Write results in HOOK.md under '## Completion Verification'.
-  9. ISSUE RE-READ: After mechanical verification, re-read the original Task above
-     (the full task description, not just the file list). Write a 3–5 line assessment
-     in HOOK.md under '## Issue Re-Read':
-       - "Does my implementation resolve the stated problem end-to-end?"
-       - "What edge cases does the task imply that I may not have handled?"
-       - "Is there anything in the task description I deprioritized?"
-     If you identify a gap, fix it before moving to quality gates.
-     If no gaps: write "Issue re-read: no gaps identified." and proceed.
+  9. ISSUE RE-READ: After mechanical verification, re-read your CONTRACT.md
+      postconditions section. For each postcondition, write a one-line assessment
+      in HOOK.md under '## Issue Re-Read':
+        - State the postcondition
+        - State whether your implementation satisfies it (YES/NO/PARTIAL)
+        - If NO or PARTIAL: what's missing and can you fix it now?
+      If all postconditions are satisfied: write "All postconditions verified."
+      If any are PARTIAL or NO: fix before proceeding to step 10 (revision pass).
+      For Howlers without postconditions (pure-create, nano mode): fall back to
+      the original prose-based re-read ("Does my implementation resolve the task?
+      What edge cases does the task imply? Is there anything I deprioritized?").
+      If no gaps: write "Issue re-read: no gaps identified." and proceed.
   10. REVISION PASS: If completion verification or contract tests revealed failures:
      - Read the test output and error messages carefully
      - Identify the root cause (not just the symptom)
-     - Fix the issue and re-run the failing tests
+     - Fix the issue
+     - Re-run the failing tests
      - Update HOOK.md with what you fixed and why
-     Maximum 2 revision passes. If tests still fail after 2 passes, proceed to
-     quality gates and document the failures — White/Gray will catch them.
+     Maximum 2 revision passes. If tests still fail after 2 passes, document the
+     failures in HOOK.md and proceed to debrief — Gold will run the quality gate
+     and surface these failures to White and Gray with full context.
      If all tests passed on first try: skip this step.
-  11. When verified: run White + Gray + /diff-review in parallel (triple gate).
-     Security criticals block. High/medium = warnings in PR description.
-  12. Fix any blockers from review. If blockers were fixed, re-run White before
-     proceeding (max 2 Orange retries total, then set Status: blocked).
-  13. Write debrief entry to ~/.claude/spectrum/{rain-id}/{howler-name}.md
-  14. Open a PR via Copper targeting main. Never push directly to main.
+  11. Write debrief to ~/.claude/spectrum/{rain-id}/{howler-name}.md
+      (Use the Debrief YAML Frontmatter template. Include open_exits and warnings.)
+  12. Signal completion: set Status: complete in HOOK.md. Your job ends here.
+      Gold will spawn White, Gray, and /diff-review — do not run these yourself.
+      Do not open a PR. Gold coordinates Copper after the gates pass.
+      See Gold Post-Howler Protocol in SPECTRUM-OPS.md for how quality gates run.
 
   DISCOVERY RELAY (if provided):
   {compressed_findings from previously-completed Howlers — ~500 tokens max.
@@ -816,11 +830,13 @@ A dep of `howler-auth#types` means: dispatch howler-api when howler-auth's HOOK.
 
 ### 2.5 Quality Gate
 
-Before opening a PR, every Howler spawns ALL THREE in parallel:
+When a Howler signals completion (Status: complete in HOOK.md), **Gold spawns ALL THREE gate agents in parallel** as visible background agents:
 
 1. **White** -- zero blockers required; White reads HOOK.md `Confidence` field and gives additional scrutiny to low-confidence seams
 2. **Gray** -- zero test failures required (coverage gaps noted in PR, not blocking)
 3. **/diff-review** -- zero security criticals required (high/medium = warning noted in PR description)
+
+Howlers implement and return to Gold — they do not spawn quality gates themselves. See **Gold Post-Howler Protocol** in SPECTRUM-OPS.md for the exact spawn prompts.
 
 **Content-heavy spectrum runs** (narrative, documentation, generated text): Gray must also grep for Unicode curly quotes that break string literals:
 
@@ -830,7 +846,7 @@ grep -rP '[\x{2018}\x{2019}\x{201C}\x{201D}]' src/ --include='*.ts' --include='*
 
 Any matches are blockers — replace with escaped ASCII equivalents. (From remnant-narrative-0329 lesson: a smart apostrophe `'` terminated a TypeScript string literal.)
 
-This is the same quality gate as single-agent PRs. Spectrum doesn't weaken standards. If blockers are found, the Howler fixes them (max 2 Orange retries). If still blocked, set `Status: blocked` in HOOK.md.
+This is the same quality gate as single-agent PRs. Spectrum doesn't weaken standards. If blockers are found, Gold spawns Orange for diagnosis (max 2 retries). If still blocked after 2 retries, set `Status: blocked` in the Howler's HOOK.md and escalate to human.
 
 ### 2.6 Completion -- Debrief Entry
 
@@ -2005,21 +2021,23 @@ Trail of Bits' `differential-review` plugin is integrated as a third parallel qu
 
 ### Per-Howler Quality Gate (Updated)
 
-Before opening a PR, every Howler spawns **three gates in parallel**:
+When a Howler signals completion, **Gold spawns three gate agents in parallel**:
 
 1. **White** — code quality review (zero blockers required)
 2. **Gray** — test execution (zero failures required; coverage gaps = warning)
 3. **/diff-review** — security-focused differential review (zero critical findings required)
 
 ```
-                   ┌── White (code quality)
-Howler completes ──┼── Gray (tests)
-                   └── /diff-review (security)
-                          │
-                     All three pass
-                          │
-                     Copper opens PR
+                        ┌── White (code quality)
+Howler signals done ────┼── Gray (tests)          [Gold spawns all three]
+                        └── /diff-review (security)
+                               │
+                          All three pass
+                               │
+                    Gold spawns Copper → opens PR
 ```
+
+Howlers implement and return — they do not run quality gates themselves. See **Gold Post-Howler Protocol** in SPECTRUM-OPS.md for spawn details.
 
 ### /diff-review Classification
 
@@ -2035,7 +2053,7 @@ Howler completes ──┼── Gray (tests)
 - **Test-only changes** — low security impact
 - **Config/tooling changes** — unless touching auth, secrets, or deployment config
 
-The Howler decides whether to run /diff-review based on the nature of their changes. If in doubt, run it — it adds ~30 seconds.
+Gold decides whether to run /diff-review based on the nature of the Howler's changes. If in doubt, run it — it adds ~30 seconds. Doc-only and test-only Howlers may skip it.
 
 ---
 
