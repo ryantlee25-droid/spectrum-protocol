@@ -38,6 +38,7 @@
 
 ## Dependency Graph (DAG)
 
+<!-- DAG format: YAML list. Each node declares its own edges. deps use howler-name for full completion, howler-name#checkpoint for partial. -->
 ```yaml
 - id: howler-auth
   deps: []

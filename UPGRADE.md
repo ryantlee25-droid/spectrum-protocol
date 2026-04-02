@@ -1,3 +1,37 @@
+# Upgrading Spectrum Protocol: v5.0 → v5.1
+
+## v5.1 Quick Upgrade (from v5.0)
+
+```bash
+# 1. Pull the latest
+cd /path/to/spectrum-protocol && git pull
+
+# 2. Copy updated protocol files (4 files now — HOWLER-OPS.md is new)
+cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
+cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
+cp spectrum/HOWLER-OPS.md ~/.claude/HOWLER-OPS.md
+cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
+
+# 3. Copy new agent definition
+cp agents/grays-run.md ~/.claude/agents/grays-run.md
+cp agents/grays.md ~/.claude/agents/grays.md
+
+# 4. Update install.sh (if using automated install)
+cp install.sh ~/.claude/install-spectrum.sh
+```
+
+### What Changed in v5.1
+
+**New file: `HOWLER-OPS.md`** — Howler-only procedural reference. Replaces full SPECTRUM-OPS.md injection into Howler sessions, saving ~10K tokens per Howler.
+
+**New agent: `grays-run` (Haiku)** — Mechanical test runner. The existing `grays` agent is now diagnosis-only (Sonnet, invoked only on test failure). This "Gray split" saves ~$0.70 per 5-Howler run.
+
+**CLAUDE.md is now 132 lines** (was 358). All inline Spectrum phase descriptions have been moved to SPECTRUM-OPS.md where they belong. Non-Spectrum sessions no longer pay the context tax.
+
+**No breaking changes.** All v5.0 spectrum runs, CHECKPOINT.json files, and agent definitions remain compatible. The only action needed is copying the new/updated files.
+
+---
+
 # Upgrading Spectrum Protocol: v4.0 → v5.0
 
 This guide covers everything you need to migrate from Spectrum v4.0 (main) to v5.0 (dev). All breaking changes are listed with their impact. The upgrade itself takes about 2 minutes.

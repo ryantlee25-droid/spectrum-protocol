@@ -1,10 +1,10 @@
-# Spectrum Protocol v4.0
+# Spectrum Protocol v5.1
 
 **A coordination protocol for parallel AI agents in Claude Code.**
 
 Spectrum turns Claude Code's sub-agent system from a stateless dispatcher into a stateful, recoverable workspace. Workers maintain durable state, declare file ownership, communicate through structured debriefs, and follow a defined failure/recovery protocol.
 
-No dependencies. No build step. No database. Copy three files and you're running.
+No dependencies. No build step. No database. Copy four files and you're running.
 
 ---
 
@@ -16,11 +16,12 @@ Spectrum defines 14 agents across two tiers: the **core pipeline** (10 agents th
 
 | Color | Glyph | Role | Model | What They Do |
 |-------|-------|------|-------|-------------|
-| **Golds** | &#9819; | Orchestrator | Opus | Muster, contracts, seam analysis, merge planning |
+| **Golds** | &#9819; | Orchestrator | Sonnet | Muster, contracts, seam analysis, merge planning |
 | **Blues** | &#9678; | Planner | Sonnet | Scopes work, produces PLAN.md before spectrum activates |
 | **Howlers** | &#187; | Worker | Sonnet+ | Implements tasks in isolated worktrees (parallel) |
 | **Whites** | &#10022; | Reviewer | Sonnet | Pre-PR diff review, contract compliance |
-| **Grays** | &#9960; | Tester | Sonnet | Runs tests, diagnoses failures, writes missing coverage |
+| **grays-run** | &#9960; | Tester | Haiku | Runs tests mechanically, reports pass/fail |
+| **Grays** | &#9960; | Diagnostician | Sonnet | Diagnoses test failures, writes missing coverage (on failure only) |
 | **Oranges** | &#10023; | Debugger | Sonnet | Root cause analysis when Howlers hit blockers |
 | **Coppers** | &#9654; | Delivery | Haiku | Commits, branch naming, PR creation |
 | **Obsidians** | &#8856; | Validator | Sonnet | Post-merge spec compliance against PLAN.md |
@@ -211,11 +212,11 @@ Spectrum runs on standard Claude Code API pricing. No additional costs.
 
 | Spectrum Size | Estimated Total Tokens | Estimated Cost |
 |---------------|----------------------|----------------|
-| 3-Howler (Reaping) | ~540,000 | ~$4.80 |
-| 5-Howler (Full) | ~955,000 | ~$9.43 |
-| 8-Howler (Full) | ~1,460,000 | ~$15.20 |
+| 3-Howler (Reaping) | ~400,000 | ~$2.80 |
+| 5-Howler (Full) | ~750,000 | ~$3.90-4.50 |
+| 8-Howler (Full) | ~1,100,000 | ~$7.50-9.00 |
 
-Howlers consume 76% of tokens but only 32% of cost (Sonnet pricing). Gold consumes 15% of tokens but 45% of cost (Opus pricing). See [Token Optimization Guide](evaluation/TOKEN-OPTIMIZATION.md) for detailed breakdown.
+v5.1 reduces costs 30-40% vs v5.0 through Gray split (Haiku for pass-path), model routing (/diff-review on Haiku for non-security), proportional quality gates, and pipeline short-circuits. See [Token Optimization Guide](evaluation/TOKEN-OPTIMIZATION.md) for detailed breakdown.
 
 ---
 
@@ -258,6 +259,23 @@ Gas Town is the better choice for large-scale deployments (20+ agents) and teams
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 ## Release Notes
+
+### 2026-04-01 — v5.1: Cost Optimization (30-40% reduction)
+
+**Token and cost overhaul** targeting the three pressure zones: Howler context injection, quality gate overhead, and Gold output verbosity.
+
+- **CLAUDE.md slimmed from 358→132 lines** — inline Spectrum phase descriptions replaced with pointers to SPECTRUM-OPS.md. Every non-Spectrum session saves ~226 lines of context.
+- **New: HOWLER-OPS.md** — Howler-only procedural reference (~2,500 tokens), replacing full SPECTRUM-OPS.md injection. Saves ~10K tokens per Howler.
+- **Gray split**: New `grays-run` agent (Haiku) handles mechanical test execution. `grays` (Sonnet) invoked only on failure. Saves ~$0.70/run.
+- **Model routing**: /diff-review uses Haiku for non-security Howlers, Sonnet for security-tagged. Self-reflect moved to Haiku.
+- **Proportional quality gates**: Gate depth scales with task risk profile (full/reaping/nano).
+- **Pipeline short-circuits**: Skip Gray for doc-only changes, skip /diff-review for non-security, spot-check White for high-confidence reaping.
+- **Coordination tax formula**: $0.43/Howler overhead quantified — prevents over-decomposition.
+- **Confidence-tiered Pax validation**: Gold reads fewer files for high-confidence Howlers.
+- **HOOK.md compactness rules**: 1,500 token target, YAML checkpoints, empty section removal.
+- **Gold conciseness directive**: Token discipline at muster and Pax. SEAM-CHECK.md as authoritative source (no re-derivation).
+- **Batch operations + read-once rule**: Fewer Howler turns = less sliding window tax.
+- **Per-Howler CONTRACT.md slicing**: ~1,800 tokens per Howler vs full 3,500.
 
 ### 2026-03-31 — Gold Model Downgrade: Opus → Sonnet
 

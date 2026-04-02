@@ -39,6 +39,7 @@ echo "  [2/5] Downloading protocol files..."
 curl -fsSL "$REPO/spectrum/CLAUDE.md" -o "$CLAUDE_DIR/CLAUDE.md"
 curl -fsSL "$REPO/spectrum/SPECTRUM-OPS.md" -o "$CLAUDE_DIR/SPECTRUM-OPS.md"
 curl -fsSL "$REPO/spectrum/SPECTRUM.md" -o "$CLAUDE_DIR/SPECTRUM.md"
+curl -fsSL "$REPO/spectrum/HOWLER-OPS.md" -o "$CLAUDE_DIR/HOWLER-OPS.md"
 
 echo "  [3/5] Downloading agent definitions (14 agents)..."
 for agent in golds blues howlers whites grays oranges coppers obsidians browns violets politicos helldivers primus greens; do
@@ -51,7 +52,7 @@ chmod +x "$HOOKS_DIR/seam_check.py"
 
 echo "  [5/5] Verifying installation..."
 MISSING=0
-for f in "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/SPECTRUM-OPS.md" "$CLAUDE_DIR/SPECTRUM.md" "$HOOKS_DIR/seam_check.py"; do
+for f in "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/SPECTRUM-OPS.md" "$CLAUDE_DIR/SPECTRUM.md" "$CLAUDE_DIR/HOWLER-OPS.md" "$HOOKS_DIR/seam_check.py"; do
     if [ ! -f "$f" ]; then
         echo "  [!] Missing: $f"
         MISSING=1
