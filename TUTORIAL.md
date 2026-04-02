@@ -12,6 +12,24 @@ This walks you through a real Spectrum run in ~20 minutes. You'll build an authe
 
 ---
 
+## Invocation Examples
+
+Here are concrete prompts you can type in Claude Code to trigger each mode:
+
+| What you type | What it triggers |
+|---|---|
+| `"Write a plan for the auth system."` | Blue only → PLAN.md (no spectrum) |
+| `"Build the auth system, API, and dashboard in parallel."` | Full spectrum: Blue → Gold → 3 Howlers |
+| `"Run this in parallel."` | Spectrum with existing PLAN.md |
+| `"Drop howlers for auth, API, and dashboard."` | Spectrum (Gold skips Blue, uses existing PLAN.md) |
+| `"Plan and build these 3 features. Keep it lean."` | Reaping mode (3-4 Howlers, pure-create only) |
+| `"Why is the auth test failing?"` | Orange only (no spectrum) |
+| `"Review my changes."` | White only (no spectrum) |
+
+Spectrum activates automatically when Gold detects 3+ independent features and PLAN.md exists. You can always ask Blue to write a plan first before kicking off a spectrum run.
+
+---
+
 ## Step 1: Tell Claude Code What to Build
 
 Type this (or something like it) in Claude Code:
