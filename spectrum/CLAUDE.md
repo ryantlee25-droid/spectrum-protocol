@@ -10,7 +10,8 @@ It applies across all projects unless overridden by a project-level `CLAUDE.md`.
 - **Gold** (Sonnet) — spectrum muster, task decomposition, contract authoring, seam analysis, merge planning. **Note**: Pax findings should be human-reviewed for severity before actioning blockers (Sonnet tends to over-classify observations as blockers).
 - **Blue** (Sonnet) — scope features, bugs, refactors, migrations → produces `PLAN.md`
 - **White** (Sonnet) — pre-PR/MR diff review — blockers, warnings, suggestions
-- **Gray** (Sonnet) — run tests with coverage, diagnose failures, write missing tests
+- **Gray** (Sonnet) — diagnose test failures, write missing tests (invoked only on failure)
+- **grays-run** (Haiku) — run tests mechanically, report pass/fail (common path)
 - **Orange** (Sonnet) — root cause analysis, fix proposals
 - **Copper** (Haiku) — commits, branch naming, PR/MR creation on GitHub or GitLab
 - **Howlers** (Sonnet floor) — implementation in spectrum worktrees; inherit session model but never below Sonnet
@@ -69,8 +70,8 @@ Gold activates automatically when 3+ independent features are detected and PLAN.
 Before Copper opens a PR/MR, Gold spawns all three quality gate agents in parallel as visible background agents:
 
 1. **White** — zero blockers
-2. **Gray** — zero failures (coverage gaps noted in PR, not blocking)
-3. **/diff-review** — zero security criticals (high/medium = warning in PR description)
+2. **grays-run** (Haiku) — zero failures (coverage gaps noted in PR, not blocking). If tests fail, Gold spawns **Gray** (Sonnet) for diagnosis.
+3. **/diff-review** — zero security criticals (high/medium = warning in PR description). Model: Haiku for `security_gate: optional`, Sonnet for `required`.
 
 **Always parallel** — spawn all three in the same message. Never sequential. Gold dispatches Copper only after all three gates pass.
 
@@ -91,7 +92,8 @@ review of blocker classifications.
 | Blues (`scout`) | **sonnet** | PLAN.md feeds directly into muster. A bad plan cascades through the entire spectrum. Sonnet is the minimum for scoping tasks and anticipating file conflicts. |
 | Howlers (`rider`) | **sonnet** (floor) | Implementation is Sonnet's sweet spot. Haiku passes tests but misses architectural intent from the contract. Howlers inherit session model but never below Sonnet. |
 | Whites (`inspector`) | **sonnet** | Reasoning depth for subtle bugs, security issues, and contract compliance. |
-| Grays (`outrider`) | **sonnet** | Diagnosing failures and writing missing tests (required by quality gate) needs Sonnet-level reasoning. Haiku misdiagnoses flaky tests and writes superficial coverage. |
+| grays-run (`outrider-run`) | **haiku** | Mechanical test execution and pass/fail reporting. Haiku is sufficient for running tests and collecting output. Saves ~$0.70/run on the common all-pass path. |
+| Grays (`outrider`) | **sonnet** | Diagnosing failures and writing missing tests. Invoked only when grays-run reports failures. Haiku misdiagnoses flaky tests. |
 | Oranges (`mechanic`) | **sonnet** | Root cause tracing across call stacks. |
 | Coppers (`courier`) | **haiku** | Commits, branch naming, PR creation are mechanical. Haiku is fine. |
 | Obsidians (`sentinel`) | **sonnet** | Spec compliance requires reading PLAN.md criteria and verifying against merged code. Needs reasoning depth. |
