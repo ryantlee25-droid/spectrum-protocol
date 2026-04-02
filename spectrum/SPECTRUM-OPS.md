@@ -32,6 +32,8 @@ Spectrum activates when ALL are true:
 
 ## Phase 1: Muster (Gold)
 
+> Token discipline: Every output token costs $75/M at Opus tier. Prefer structured YAML over narrative prose for MANIFEST.md DAG sections. Omit reasoning that does not inform the human or downstream agents.
+
 **Structural enforcement**: During muster, the Gold MUST NOT use Write or Edit tools on project source files. The Gold plans; it does not code. The only files the Gold writes are Spectrum artifacts (MANIFEST.md, CONTRACT.md, ARCHITECTURE.md, CHECKPOINT.json, convoy-contracts.d.ts). If the Gold needs to modify source code, that work belongs to a Howler.
 
 1. Generate rain ID (short slug: `auth-refactor-0329`)
@@ -532,12 +534,17 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
-  0. Read CONTRACT.md at the path above FIRST. Pay special attention to:
+  0. Read ~/.claude/HOWLER-OPS.md FIRST — it contains your complete procedural reference:
+     HOOK.md template, completion verification checklist, scope alignment rules,
+     quality gate instructions, debrief schema, and contract amendment procedure.
+     Then read CONTRACT.md at the path above. CONTRACT.md is your source of truth for
+     this specific spectrum (task scope, codebase context, postconditions).
+     Pay special attention to:
      - Your per-Howler `## Codebase Context` section (existing patterns you must follow)
      - Your preconditions/postconditions
      - Shared types and interfaces
-     This is your source of truth. Do not re-derive patterns from the codebase if
-     CONTRACT.md has already captured them — use what Gold documented.
+     Do not re-derive patterns from the codebase if CONTRACT.md has already captured
+     them — use what Gold documented.
   1. Write HOOK.md immediately (before any code).
   2. Update HOOK.md continuously -- decisions, seams, blockers, errors.
   3. Follow CONTRACT exactly. If wrong: Status: blocked, describe why.
@@ -668,6 +675,14 @@ MODIFIES: {files}
 
 **`git_status` values**: `ok` (default — git operations work), `needs_operator_commit` (git failed — Gold commits on Howler's behalf after Howler completes file writes).
 
+### HOOK.md Compactness Rules
+
+Apply when writing and updating HOOK.md:
+- **Completion Verification**: write `PASS (N files)` or `FAIL (file: reason)` — not full `ls -la` output
+- **Empty sections**: omit entirely if empty (`Blockers: (none)` → remove the section; `Errors: (none)` → remove; `Cross-Domain: (none)` → remove)
+- **Decisions**: one line per decision, not paragraphs
+- **Target**: HOOK.md under 1,500 tokens at submission
+
 **Howler heartbeat**: Every 30 tool calls or ~1 hour (whichever comes first), update HOOK.md with current status. If the Gold detects no heartbeat for 4+ hours, the Howler is treated as stuck and escalated without waiting for manual intervention.
 
 ### Type Checkpoints
@@ -763,13 +778,15 @@ warnings:
 
 ## Phase 4: Pax (Gold)
 
+> Token discipline: Every output token costs $75/M at Opus tier. Prefer structured YAML over narrative prose for MANIFEST.md DAG sections. Omit reasoning that does not inform the human or downstream agents.
+
 1. **Independent validation** — do NOT trust Howler self-reports. For each Howler:
    - Read 2-3 key files the Howler created/modified
    - Verify against CONTRACT.md postconditions (exported types match? integration points exist?)
    - Check no files outside the ownership matrix were touched
    - Flag discrepancies as integration risks in PAX-PLAN.md
 2. Run `python3 ~/.claude/hooks/seam_check.py ~/.claude/spectrum/<rain-id>/`
-3. Read SEAM-CHECK.md results
+3. Read SEAM-CHECK.md as the authoritative seam cross-reference. SEAM-CHECK.md is the source of truth for which seams are satisfied, broken, or missing — do not re-derive seam cross-references from debrief narratives. Read debrief narratives for qualitative signals only (confidence, warnings, architectural decisions).
 4. Review Cross-Domain Observations from each Howler's HOOK.md — surface issues that need attention
 5. Read AMENDMENT.md files from Howler worktrees
 6. Write PAX-PLAN.md with merge order, independent validation results, seam check results, warnings, risks
@@ -783,7 +800,7 @@ Human merges PRs in PAX-PLAN.md order. Dependencies merge first.
 
 **After each merge:**
 1. **Gray runs tests.** If tests fail, halt and fix before merging more.
-2. **Per-PR self-reflect** — Gold writes a 3-5 line note in CHECKPOINT.json under `merge_reflections`: what worked, what surprised, what the next merge should watch for. These compound — reflection N informs merge N+1. (From metaswarm: capture learnings atomic with the code, not just post-Spectrum.)
+2. **Per-PR self-reflect** — A Sonnet agent writes a 3-5 line note in CHECKPOINT.json under `merge_reflections`: what worked, what surprised, what the next merge should watch for. These compound — reflection N informs merge N+1. (From metaswarm: capture learnings atomic with the code, not just post-Spectrum.)
 
 (For 2 or fewer PRs, a single post-merge Gray run is sufficient. Self-reflect still runs.)
 
