@@ -12,7 +12,8 @@
 | Blues | `blues` | sonnet | ◎ | `blue` | Plan work → PLAN.md (before Spectrum) |
 | Howlers | `howlers` | sonnet+ | » | `orange` | Implement tasks in isolated worktrees |
 | Whites | `whites` | sonnet | ✦ | `purple` | Pre-PR diff review, contract compliance |
-| Grays | `grays` | sonnet | ⛨ | `gray` | Run tests, diagnose failures, write coverage |
+| grays-run | `grays-run` | haiku | ⛨ | `gray` | Run tests, report pass/fail (mechanical execution) |
+| Grays | `grays` | sonnet | ⛨ | `gray` | Diagnose test failures, write missing tests (Sonnet-only on fail) |
 | Oranges | `oranges` | sonnet | ✧ | `red` | Root cause analysis on blocked Howlers |
 | Coppers | `coppers` | haiku | ▶ | `cyan` | Commits, branches, PRs |
 | Obsidians | `obsidians` | sonnet | ⊘ | `teal` | Post-merge spec compliance against PLAN.md |
@@ -33,6 +34,8 @@ Spectrum activates when ALL are true:
 ## Phase 1: Muster (Gold)
 
 > Token discipline: Every output token costs $75/M at Opus tier. Prefer structured YAML over narrative prose for MANIFEST.md DAG sections. Omit reasoning that does not inform the human or downstream agents.
+
+> **Coordination tax formula**: Before adding Howlers, estimate: `cost_per_howler = base_impl + (N * coordination_overhead)`. If `coordination_overhead > 0.3 * base_impl`, reduce N or switch to reaping/nano mode. Rule of thumb: 3 Howlers for tasks under $5 target; 5 for $5-10; 8 only when tasks are clearly independent and large.
 
 **Structural enforcement**: During muster, the Gold MUST NOT use Write or Edit tools on project source files. The Gold plans; it does not code. The only files the Gold writes are Spectrum artifacts (MANIFEST.md, CONTRACT.md, ARCHITECTURE.md, CHECKPOINT.json, convoy-contracts.d.ts). If the Gold needs to modify source code, that work belongs to a Howler.
 
@@ -66,6 +69,7 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
       Usage: `python3 tools/codebase_index.py --files {MODIFIES list} --root {project_root}`
     - Integration points (what connects to what)
     - Design-by-Contract per Howler — full DbC for interface-heavy Howlers, conventions-only for pure-create Howlers
+    - **Per-Howler Dispatch Slicing**: At drop time, Gold constructs a per-Howler contract slice (~1,800 tokens) containing: shared types/constants/conventions (always), own DbC section, and "Seams affecting you" (2-3 lines from neighboring Howlers' DbC). Exclude all other Howlers' full DbC sections (~1,700 tokens saved per Howler).
     - Test impact map per Howler: output of `python3 tools/test_impact_map.py --files {MODIFIES+CREATES} --root {project_root}` — which test files cover the Howler's owned files
 10.5. **Issue Confirmation Gate** — After writing CONTRACT.md, before running White Pre-Check or
     Politico, Gold displays to the human:
@@ -431,6 +435,8 @@ When dropping Howlers whose dependencies have completed, the Gold compresses com
 
 **What NOT to include:** Full debrief content, error logs, or anything the CONTRACT.md already covers.
 
+**Hard cap: 500 tokens per relay.** Gold must count words (500 tokens ~ 375 words) and truncate if exceeded. Priority order: (1) key decisions, (2) file paths created, (3) warnings, (4) cross-domain observations. Stop when cap is reached.
+
 ### Post-Drop Worktree Verification
 
 **Immediately after each Howler drop**, verify:
@@ -469,24 +475,36 @@ self-reviewed inside their own session.
    ")
    ```
 
-2. **Gray** (test runner):
+2. **Gray-run** (test execution — Haiku):
    ```
-   Agent(description="⛨ Grays — testing {howler-name}", model="sonnet",
+   Agent(description="⛨ grays-run — testing {howler-name}", model="haiku",
          run_in_background=True, prompt="
      Run tests for {howler-name}'s changes in branch spectrum/{rain-id}/{howler-name}.
-     Use the Test Impact Map from CONTRACT.md. Zero failures required.
-     Output: test results with pass/fail counts.
+     Use the Test Impact Map from CONTRACT.md. Report pass/fail counts only.
+     If all tests pass: output PASS summary and exit.
+     If any tests fail: output FAIL with test names and error messages.
    ")
    ```
+   If grays-run reports FAIL, Gold spawns **Gray-diagnose** (Sonnet) with the failure output:
+   ```
+   Agent(description="⛨ grays — diagnosing {howler-name} failures", model="sonnet",
+         run_in_background=True, prompt="
+     Test failures for {howler-name}: {grays-run failure output}.
+     Diagnose root causes. Zero failures required for PR.
+   ")
+   ```
+   This split saves ~$0.70/run: Haiku handles the common pass case; Sonnet is invoked only on failure.
 
 3. **/diff-review** (security):
    ```
-   Agent(description="✧ Oranges — security review {howler-name}", model="sonnet",
+   Agent(description="✧ /diff-review — security review {howler-name}",
+         model="{haiku if security_gate=optional, sonnet if security_gate=required}",
          run_in_background=True, prompt="
      Security-focused diff review for {howler-name}. Zero criticals required.
      High/medium = warnings in PR description.
    ")
    ```
+   Model routing: use `security_gate` tag from MANIFEST.md. `required` (auth, APIs, user data) = Sonnet. `optional` (docs, internal utils, UI with no data) = Haiku.
 
 **After all 3 return:**
 - All pass → spawn Copper: `Agent(description="▶ Coppers — PR for {howler-name}", model="haiku", ...)`
@@ -514,6 +532,11 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   Worktree: ~/.claude/spectrum/{rain-id}/worktrees/{howler-name}
   Task: {scope from MANIFEST}
 
+  PROMPT ORDERING (cache-friendly): Static content (HOWLER-OPS.md path, CONTRACT.md path,
+  worktree note, instructions) comes first. Variable content (task scope, file ownership,
+  discovery relay, known risks) comes last. This ordering maximizes prompt cache hits
+  across Howler drops within the same spectrum.
+
   WORKTREE NOTE: Your worktree is pre-initialized on branch
   spectrum/{rain-id}/{howler-name} from commit {base_commit}. Write your files
   to this directory. If git operations fail, write all files and set
@@ -534,17 +557,22 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
   # with a 2000-token contract this saves ~10,000 input tokens (~$0.03 at Sonnet rates).
 
   INSTRUCTIONS:
-  0. Read ~/.claude/HOWLER-OPS.md FIRST — it contains your complete procedural reference:
-     HOOK.md template, completion verification checklist, scope alignment rules,
-     quality gate instructions, debrief schema, and contract amendment procedure.
-     Then read CONTRACT.md at the path above. CONTRACT.md is your source of truth for
-     this specific spectrum (task scope, codebase context, postconditions).
+  0. **READ-ONCE RULE**: Read ~/.claude/HOWLER-OPS.md and CONTRACT.md exactly once at session start.
+     Do not re-read these files unless you need to check a specific postcondition or convention.
+     Internalize the key points on first read; do not use repeated reads as a crutch.
+     HOWLER-OPS.md contains your procedural reference (HOOK.md template, verification checklist,
+     scope alignment, quality gate, debrief schema, contract amendments).
+     CONTRACT.md is your source of truth for this spectrum (task scope, codebase context, postconditions).
      Pay special attention to:
      - Your per-Howler `## Codebase Context` section (existing patterns you must follow)
      - Your preconditions/postconditions
      - Shared types and interfaces
      Do not re-derive patterns from the codebase if CONTRACT.md has already captured
      them — use what Gold documented.
+     **BATCH OPERATIONS**: Prefer batch file operations over individual reads/writes.
+     When you need to read multiple files, read them in a single tool call batch.
+     When you need to create multiple files, write them consecutively without interleaving reads.
+     Each tool call round-trip adds ~2k tokens of context accumulation.
   1. Write HOOK.md immediately (before any code).
   2. Update HOOK.md continuously -- decisions, seams, blockers, errors.
   3. Follow CONTRACT exactly. If wrong: Status: blocked, describe why.
@@ -633,44 +661,28 @@ CREATES: {files}
 MODIFIES: {files}
 
 ## Checkpoints
-- types: PENDING
+checkpoints: {types: PENDING}
 
 ## Progress
 - [x] Step 1
 - [ ] Step 2
 
 ## Decisions
-- {key decisions and rationale}
+- {one-line decision with rationale}
 
 ## Seams
 - {what other Howlers need from this work}
 
-## Cross-Domain Observations
-- {anything noticed outside your ownership boundary — bugs, inconsistencies, opportunities in other Howlers' domains. Flag it here even if you can't fix it.}
-
 ## Completion Verification
-- [ ] All CREATES files exist: {ls results}
-- [ ] All MODIFIES files changed: {git diff --name-only results}
-- [ ] Type check passes: {tsc --noEmit or N/A}
-- [ ] Tests pass on owned files: {test results or N/A}
-- [ ] Postcondition verification passes: {verify_postconditions.py results or N/A if no DbC}
+verification: {creates: PASS (N files), modifies: PASS (N files), types: PASS|N/A, tests: PASS|N/A, postconditions: PASS|N/A}
 
 ## Issue Re-Read
-- [ ] Re-read CONTRACT.md postconditions (or original task if no postconditions)
-- {postcondition}: {YES/NO/PARTIAL} — {one-line evidence or what's missing}
-- {postcondition}: {YES/NO/PARTIAL} — {one-line evidence or what's missing}
-- Summary: {"All postconditions verified." | "Issue re-read: no gaps identified." | gaps and fix plan}
+- {postcondition}: {YES/NO/PARTIAL} — {one-line evidence}
+- Summary: {"All postconditions verified." | "Issue re-read: no gaps identified."}
 
 ## Revision Pass
-- Pass 1: {what failed, what was fixed, or "all tests passed — no revision needed"}
-- Pass 2: {if needed — what failed, what was fixed}
+- Pass 1: {what failed/fixed, or "no revision needed"}
 
-## Blockers
-- (none)
-
-## Errors Encountered
-- (none)
-  locus: {file path}
 ```
 
 **`git_status` values**: `ok` (default — git operations work), `needs_operator_commit` (git failed — Gold commits on Howler's behalf after Howler completes file writes).
@@ -682,6 +694,13 @@ Apply when writing and updating HOOK.md:
 - **Empty sections**: omit entirely if empty (`Blockers: (none)` → remove the section; `Errors: (none)` → remove; `Cross-Domain: (none)` → remove)
 - **Decisions**: one line per decision, not paragraphs
 - **Target**: HOOK.md under 1,500 tokens at submission
+
+**Artifact size limits** (to prevent context bloat at Pax):
+- HOOK.md: under 1,500 tokens at submission
+- Debrief narrative: under 2,500 tokens (use JSON summary for mechanical data)
+- Discovery relay: hard cap 500 tokens
+- MANIFEST.md DAG: use YAML format, not prose
+- CONTRACT.md per-Howler DbC: 500-800 tokens per Howler section
 
 **Howler heartbeat**: Every 30 tool calls or ~1 hour (whichever comes first), update HOOK.md with current status. If the Gold detects no heartbeat for 4+ hours, the Howler is treated as stuck and escalated without waiting for manual intervention.
 
@@ -714,6 +733,21 @@ If blockers are found and fixed: **re-run White** before Copper opens PR.
 **Content-heavy Spectrums**: Gray also greps for Unicode curly quotes (`[''""]`) in .ts/.tsx — these are blockers.
 
 Skip /diff-review for: doc-only Spectrums, test-only changes, non-security config.
+
+### Short-Circuit Conditions
+
+Skip quality gate agents when their value is near-zero:
+- **Skip Gray** when the Howler only creates/modifies `.md` files (no executable code to test)
+- **Skip /diff-review** when `security_gate: optional` in MANIFEST.md (see P2-4)
+- **Skip White for reaping mode** when Howler confidence is `high` and all postconditions verified — downgrade to a spot-check (read 1 file instead of full diff review). If spot-check raises concerns, escalate to full White.
+
+### Quality Gate Profiles
+
+| Mode | White | Gray | /diff-review |
+|------|-------|------|-------------|
+| Full (default) | Sonnet, full diff | grays-run (Haiku) + grays (Sonnet on fail) | Sonnet (security_gate=required) or Haiku (optional) |
+| Reaping | Sonnet (or spot-check if high confidence) | grays-run (Haiku) + grays (Sonnet on fail) | Haiku (all reaping tasks are optional by default) |
+| Nano | Skip | Skip | Skip |
 
 ### Debrief YAML Frontmatter
 ```yaml
@@ -780,8 +814,11 @@ warnings:
 
 > Token discipline: Every output token costs $75/M at Opus tier. Prefer structured YAML over narrative prose for MANIFEST.md DAG sections. Omit reasoning that does not inform the human or downstream agents.
 
-1. **Independent validation** — do NOT trust Howler self-reports. For each Howler:
-   - Read 2-3 key files the Howler created/modified
+1. **Independent validation** — do NOT trust Howler self-reports. Validation depth is **confidence-tiered**:
+   - `confidence: high` + `contract_compliance: full`: read 1 file (spot check)
+   - `confidence: medium`: read 2-3 files (standard validation)
+   - `confidence: low` or `contract_compliance: partial`: read 3+ files (full validation)
+   For each Howler at the appropriate depth:
    - Verify against CONTRACT.md postconditions (exported types match? integration points exist?)
    - Check no files outside the ownership matrix were touched
    - Flag discrepancies as integration risks in PAX-PLAN.md
@@ -800,7 +837,7 @@ Human merges PRs in PAX-PLAN.md order. Dependencies merge first.
 
 **After each merge:**
 1. **Gray runs tests.** If tests fail, halt and fix before merging more.
-2. **Per-PR self-reflect** — A Sonnet agent writes a 3-5 line note in CHECKPOINT.json under `merge_reflections`: what worked, what surprised, what the next merge should watch for. These compound — reflection N informs merge N+1. (From metaswarm: capture learnings atomic with the code, not just post-Spectrum.)
+2. **Per-PR self-reflect** — A Haiku agent writes a 3-5 line note in CHECKPOINT.json under `merge_reflections`: what worked, what surprised, what the next merge should watch for. These compound — reflection N informs merge N+1. (From metaswarm: capture learnings atomic with the code, not just post-Spectrum.) Model: Haiku — this is structured journaling, not complex synthesis.
 
 (For 2 or fewer PRs, a single post-merge Gray run is sufficient. Self-reflect still runs.)
 
