@@ -43,6 +43,17 @@ warnings:
   - "Session token refresh happens client-side via Clerk's SDK -- server-side getSession() reads the latest valid token but does not trigger refresh"
 ---
 
+## JSON Summary
+```json
+{
+  "completed_files": ["src/middleware/auth.ts", "src/lib/session.ts", "src/types/auth.ts", "src/app/layout.tsx"],
+  "confidence": "high",
+  "contract_compliance": "full",
+  "open_exits_count": 2,
+  "warnings_count": 2
+}
+```
+
 ## What I Built
 
 Implemented Clerk-based authentication for the application:

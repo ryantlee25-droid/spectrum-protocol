@@ -21,8 +21,7 @@ CREATES: src/middleware/auth.ts, src/lib/session.ts, src/types/auth.ts
 MODIFIES: src/app/layout.tsx
 
 ## Checkpoints
-
-- types: STABLE (marked at 10:38 -- UserSession interface finalized and exported)
+checkpoints: {types: STABLE}
 
 ## Progress
 

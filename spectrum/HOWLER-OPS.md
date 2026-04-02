@@ -1,7 +1,17 @@
 # HOWLER-OPS.md — Howler Operational Reference
 
-> Howler-only procedural reference. Read this at the start of your worktree session.
+> **READ-ONCE**: Read this file exactly once at session start. Internalize the key points.
+> Do not re-read unless checking a specific postcondition or convention.
 > Full spec: ~/.claude/SPECTRUM.md | Gold/Howler ops: ~/.claude/SPECTRUM-OPS.md
+
+---
+
+## File Operation Discipline
+
+- **Batch reads**: When you need to read multiple files, read them in a single tool call batch.
+- **Batch writes**: When creating multiple files, write them consecutively without interleaving reads.
+- **Minimize round-trips**: Each tool call adds ~2k tokens of context accumulation. Plan your reads and writes to minimize total tool calls.
+- **Read-once for reference files**: HOWLER-OPS.md and CONTRACT.md should each be read once. Do not re-read as a crutch.
 
 ---
 
