@@ -114,7 +114,8 @@ MODIFIES: {files}
 - {key decisions and rationale}
 
 ## Seams
-- {what other Howlers need from this work}
+- exports: {what this Howler produces} → consumed_by: {howler-name}
+- imports: {what this Howler needs} → produced_by: {howler-name}
 
 ## Cross-Domain Observations
 - {anything noticed outside your ownership boundary — bugs, inconsistencies, opportunities in other Howlers' domains. Flag it here even if you can't fix it.}

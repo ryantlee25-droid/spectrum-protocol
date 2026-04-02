@@ -174,6 +174,8 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
       "mode": "full|reaping",
       "howlers": [{"name": "...", "status": "pending", "branch": "...", "worktree_path": "...", "commit": null}],
       "errors": [],
+      "quality_gates": {},
+      "agent_spawns": {"muster": 0, "dispatch": 0, "gates": 0, "pax": 0, "merge": 0, "triumph": 0},
       "cost_tracking": {
         "budget_limit": null,
         "total_tokens": 0,
@@ -193,6 +195,14 @@ in parallel (e.g., as background agents) rather than sequentially. Estimated sav
       "resumed_at": null
     }
     ```
+    **Agent spawn tracking**: Gold increments `agent_spawns` counters as agents are spawned:
+    - `muster`: Gold + Blue + Politico + White Pre-Check
+    - `dispatch`: per Howler dropped
+    - `gates`: per quality gate agent spawned (White + Gray-run + Gray-diagnose + /diff-review)
+    - `pax`: Gold Pax + seam_check
+    - `merge`: per-merge Gray + self-reflect
+    - `triumph`: Final Gray + Obsidian + Brown + Gold-reviews-Brown
+
     Valid phases: `planning`, `approved`, `dispatching`, `running`, `integrating`, `merging`, `complete`
     Valid howler statuses: `pending`, `dispatching`, `running`, `blocked`, `complete`, `failed`, `auto-skipped`
 
@@ -263,7 +273,7 @@ Deps: `howler-name` = full completion, `howler-name#types` = STABLE checkpoint.
 For 3-4 Howler Spectrums where all tasks are pure-create with no shared interfaces:
 
 **Activation** (all must be true):
-- 3-4 Howlers maximum
+- **3-4 Howlers maximum** (hard limit — Gold MUST reject reaping mode if Howler count > 4)
 - All Howlers only CREATE new files (no MODIFIES)
 - No shared TypeScript interfaces between Howlers
 - Human requests "reaping" or Gold judges overhead excessive
@@ -507,6 +517,14 @@ self-reviewed inside their own session.
    Model routing: use `security_gate` tag from MANIFEST.md. `required` (auth, APIs, user data) = Sonnet. `optional` (docs, internal utils, UI with no data) = Haiku.
 
 **After all 3 return:**
+- **Record gate results** in CHECKPOINT.json `quality_gates` per Howler:
+  ```json
+  "quality_gates": {
+    "howler-auth": {"white": "pass", "gray_run": "pass", "gray_diagnose": "skip", "diff_review": "pass"},
+    "howler-api": {"white": "pass", "gray_run": "fail", "gray_diagnose": "pass", "diff_review": "skip"}
+  }
+  ```
+- Increment `agent_spawns.gates` by the number of gate agents spawned this round.
 - All pass → spawn Copper: `Agent(description="▶ Coppers — PR for {howler-name}", model="haiku", ...)`
 - Any blocker → spawn Orange for diagnosis: `Agent(description="✧ Oranges — diagnosing {howler-name}", model="sonnet", ...)`
 - After Orange diagnosis → Gold decides: Resume Howler, Retry, or Restructure
@@ -671,7 +689,8 @@ checkpoints: {types: PENDING}
 - {one-line decision with rationale}
 
 ## Seams
-- {what other Howlers need from this work}
+- exports: {what this Howler produces} → consumed_by: {howler-name}
+- imports: {what this Howler needs} → produced_by: {howler-name}
 
 ## Completion Verification
 verification: {creates: PASS (N files), modifies: PASS (N files), types: PASS|N/A, tests: PASS|N/A, postconditions: PASS|N/A}
@@ -772,6 +791,8 @@ files_created:
   - src/middleware/auth.ts
 files_modified:
   - src/app/layout.tsx
+effort_estimated: M
+effort_actual: M
 contract_compliance: full
 open_exits:
   - "No org-creation flow"
@@ -799,6 +820,13 @@ warnings:
 | structural | No — human confirms | Re-run muster |
 | environmental | No — human confirms | Pause all, fix env, resume |
 | conflict | No — human confirms | Freeze and escalate |
+
+### Failure Logging
+When Gold classifies a failure, write to CHECKPOINT.json `errors` array:
+```json
+{"howler": "howler-auth", "type": "logical", "locus": "src/auth.ts", "action": "retry", "timestamp": "ISO"}
+```
+This creates an audit trail for failure recovery analysis.
 
 ### Circuit Breaker
 2 failures on same `locus:` → auto-escalate to structural. Gold checks locus history before auto-resuming.
