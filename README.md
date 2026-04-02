@@ -152,11 +152,7 @@ Key findings from the evaluation:
 - Spectrum leads in coordination rigor (failure taxonomy, contract management, merge planning, quality gates)
 - The field is converging on patterns Spectrum already implements: spec-before-code, git worktree isolation, quality gates before merge, model routing by task complexity
 
-Full evaluation documents are in the [`evaluation/`](evaluation/) directory:
-- [Final Audit Synthesis](evaluation/FINAL-AUDIT.md) -- cross-referenced findings from five independent analysis tracks
-- [Agentic Landscape](evaluation/AGENTIC-LANDSCAPE.md) -- survey of 28 multi-agent systems
-- [Token Optimization Guide](evaluation/TOKEN-OPTIMIZATION.md) -- cost analysis and optimization strategies
-- [Cost Analysis](evaluation/COST-ANALYSIS.md) -- phase-by-phase token budget breakdown
+Evaluation documents (competitive audits, cost analyses, benchmarks) are on the [`research`](https://github.com/ryantlee25-droid/spectrum-protocol/tree/research/evaluation) branch.
 
 ---
 
@@ -197,11 +193,7 @@ spectrum-protocol/
 │   ├── CONTRACT.md            # Sample contract
 │   ├── HOOK.md                # Sample Howler state
 │   └── debrief.md             # Sample debrief
-└── evaluation/
-    ├── FINAL-AUDIT.md         # Audit synthesis
-    ├── TOKEN-OPTIMIZATION.md  # Token cost guide
-    ├── AGENTIC-LANDSCAPE.md   # 28-system landscape survey
-    └── COST-ANALYSIS.md       # Phase-by-phase cost breakdown
+└── UPGRADE.md                 # Migration guide
 ```
 
 ---
@@ -216,7 +208,7 @@ Spectrum runs on standard Claude Code API pricing. No additional costs.
 | 5-Howler (Full) | ~750,000 | ~$3.90-4.50 |
 | 8-Howler (Full) | ~1,100,000 | ~$7.50-9.00 |
 
-v5.1 reduces costs 30-40% vs v5.0 through Gray split (Haiku for pass-path), model routing (/diff-review on Haiku for non-security), proportional quality gates, and pipeline short-circuits. See [Token Optimization Guide](evaluation/TOKEN-OPTIMIZATION.md) for detailed breakdown.
+v5.1 reduces costs 30-40% vs v5.0 through Gray split (Haiku for pass-path), model routing (/diff-review on Haiku for non-security), proportional quality gates, and pipeline short-circuits.
 
 ---
 
@@ -286,4 +278,4 @@ See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 - **Results**: Sonnet scored 0.94 composite vs Opus 1.00, passing all phase thresholds (Muster 0.95/0.85, Pax 0.90/0.80, Forge 1.00/0.90)
 - **Cost impact**: 91% reduction in Gold phase costs (~$3.50/spectrum saved)
 - **One caveat**: Sonnet over-classifies severity in Pax (promotes observations to blockers). Mitigated by human review of Pax findings before actioning.
-- Full report: `evaluation/gold-comparison/results/COMPARISON-REPORT.md`
+- Full report on the [`research`](https://github.com/ryantlee25-droid/spectrum-protocol/tree/research/evaluation/gold-comparison) branch
