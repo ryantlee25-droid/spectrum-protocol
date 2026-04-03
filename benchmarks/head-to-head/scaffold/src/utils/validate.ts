@@ -10,9 +10,7 @@ import { config } from "../config";
  *   - limit must be >= 1
  *   - limit must be <= config.api.maxLimit (100)
  *
- * NOTE: The clean version uses `> config.api.maxLimit` (i.e., > 100).
- * howler-expected will plant an off-by-one bug changing this to `>= 100`,
- * which incorrectly rejects limit=100 as invalid.
+ * Validates that limit does not exceed the configured maximum.
  */
 export function validatePagination(page: number, limit: number): void {
   if (page < 1) {
@@ -31,7 +29,7 @@ export function validatePagination(page: number, limit: number): void {
     throw error;
   }
 
-  if (limit > config.api.maxLimit) {
+  if (limit >= config.api.maxLimit) {
     const error: ApiError = {
       code: "VALIDATION_ERROR",
       message: `Invalid limit: ${limit}. Limit must be <= ${config.api.maxLimit}.`,

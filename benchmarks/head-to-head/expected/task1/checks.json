@@ -1,0 +1,26 @@
+{
+  "must_contain": [
+    {
+      "file": "src/types.ts",
+      "pattern": "export interface Account"
+    },
+    {
+      "file": "src/api/users.ts",
+      "pattern": "Account"
+    }
+  ],
+  "must_not_contain": [
+    {
+      "file": "src/types.ts",
+      "pattern": "export interface User[^S]"
+    },
+    {
+      "file": "src/api/users.ts",
+      "pattern": ":\\s*User[^S]"
+    },
+    {
+      "file": "src/api/posts.ts",
+      "pattern": ":\\s*User[^S]"
+    }
+  ]
+}
