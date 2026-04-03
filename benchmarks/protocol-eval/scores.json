@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "title": "Protocol-Level Evaluation: Spectrum v5.1 vs 10 Multi-Agent Systems",
+    "date": "2026-04-01",
+    "rain_id": "protocol-eval-0401",
+    "rubric": "1-5 scale (1=not addressed, 5=comprehensive with feedback loop)",
+    "anti_inflation": "Claims without architectural evidence capped at 3",
+    "dimensions": [
+      "Task Decomposition",
+      "Conflict Prevention",
+      "Communication Efficiency",
+      "Failure Recovery",
+      "Knowledge Sharing",
+      "State Management",
+      "Quality Assurance",
+      "Scalability",
+      "Mode Adaptability",
+      "Setup Complexity",
+      "Observability",
+      "Cost Awareness"
+    ],
+    "dimension_groups": {
+      "coordination_quality": [1, 2, 3, 4, 5],
+      "protocol_architecture": [6, 7, 8, 9],
+      "operational_quality": [10, 11, 12]
+    }
+  },
+  "systems": [
+    {
+      "name": "Spectrum Protocol v5.1",
+      "group": "claude-code",
+      "type": "CLAUDE.md coordination protocol",
+      "scores": [5, 5, 4, 5, 4, 5, 5, 4, 5, 4, 4, 4],
+      "composite": 4.50,
+      "rank": 1
+    },
+    {
+      "name": "LangGraph",
+      "group": "frameworks",
+      "type": "Python/JS stateful graph framework",
+      "scores": [4, 3, 4, 4, 3, 5, 3, 4, 3, 3, 4, 3],
+      "composite": 3.58,
+      "rank": 2
+    },
+    {
+      "name": "CrewAI",
+      "group": "frameworks",
+      "type": "Python multi-agent framework",
+      "scores": [4, 2, 4, 3, 4, 3, 3, 4, 3, 3, 4, 3],
+      "composite": 3.33,
+      "rank": 3
+    },
+    {
+      "name": "Gas Town",
+      "group": "claude-code",
+      "type": "CLAUDE.md coordination protocol",
+      "scores": [4, 4, 4, 3, 3, 4, 3, 3, 2, 4, 3, 2],
+      "composite": 3.25,
+      "rank": 4
+    },
+    {
+      "name": "MetaGPT",
+      "group": "frameworks",
+      "type": "Python SOP-based framework",
+      "scores": [5, 3, 4, 2, 3, 3, 4, 3, 2, 2, 3, 2],
+      "composite": 3.00,
+      "rank": 5
+    },
+    {
+      "name": "Cursor Agents",
+      "group": "commercial",
+      "type": "IDE-integrated AI agents",
+      "scores": [3, 2, 3, 3, 3, 3, 2, 3, 2, 5, 3, 3],
+      "composite": 2.92,
+      "rank": 6
+    },
+    {
+      "name": "AutoGen/AG2",
+      "group": "frameworks",
+      "type": "Python conversation framework",
+      "scores": [3, 2, 4, 3, 3, 2, 3, 3, 3, 3, 3, 2],
+      "composite": 2.83,
+      "rank": 7
+    },
+    {
+      "name": "Citadel",
+      "group": "claude-code",
+      "type": "CLAUDE.md coordination protocol",
+      "scores": [3, 3, 3, 2, 2, 3, 3, 3, 2, 4, 2, 2],
+      "composite": 2.67,
+      "rank": 8
+    },
+    {
+      "name": "OpenAI Agents SDK",
+      "group": "commercial",
+      "type": "Python agent SDK",
+      "scores": [3, 1, 3, 3, 2, 2, 3, 3, 2, 4, 4, 2],
+      "composite": 2.67,
+      "rank": 8
+    },
+    {
+      "name": "oh-my-claudecode",
+      "group": "claude-code",
+      "type": "Claude Code plugin system",
+      "scores": [2, 1, 2, 2, 2, 2, 2, 2, 2, 4, 2, 1],
+      "composite": 2.00,
+      "rank": 10
+    },
+    {
+      "name": "Overstory",
+      "group": "claude-code",
+      "type": "Claude Code workflow config",
+      "scores": [2, 1, 1, 2, 2, 1, 2, 1, 2, 5, 1, 1],
+      "composite": 1.75,
+      "rank": 11
+    }
+  ],
+  "dimension_leaders": {
+    "Task Decomposition": ["Spectrum Protocol v5.1", "MetaGPT"],
+    "Conflict Prevention": ["Spectrum Protocol v5.1"],
+    "Communication Efficiency": ["Spectrum Protocol v5.1", "LangGraph", "CrewAI", "Gas Town", "AutoGen/AG2", "MetaGPT"],
+    "Failure Recovery": ["Spectrum Protocol v5.1"],
+    "Knowledge Sharing": ["Spectrum Protocol v5.1", "CrewAI"],
+    "State Management": ["Spectrum Protocol v5.1", "LangGraph"],
+    "Quality Assurance": ["Spectrum Protocol v5.1"],
+    "Scalability": ["Spectrum Protocol v5.1", "LangGraph", "CrewAI"],
+    "Mode Adaptability": ["Spectrum Protocol v5.1"],
+    "Setup Complexity": ["Cursor Agents", "Overstory"],
+    "Observability": ["Spectrum Protocol v5.1", "LangGraph", "CrewAI", "OpenAI Agents SDK"],
+    "Cost Awareness": ["Spectrum Protocol v5.1"]
+  },
+  "group_averages": {
+    "claude-code": 2.83,
+    "frameworks": 3.19,
+    "commercial": 2.79
+  }
+}
