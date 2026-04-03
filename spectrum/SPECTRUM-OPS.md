@@ -489,9 +489,26 @@ self-reviewed inside their own session.
    ```
    Agent(description="⛨ grays-run — testing {howler-name}", model="haiku",
          run_in_background=True, prompt="
-     Run tests for {howler-name}'s changes in branch spectrum/{rain-id}/{howler-name}.
-     Use the Test Impact Map from CONTRACT.md. Report pass/fail counts only.
-     If all tests pass: output PASS summary and exit.
+     Run mechanical validation for {howler-name}'s changes in branch spectrum/{rain-id}/{howler-name}.
+
+     STEP 1 — BASELINE: Run the test suite BEFORE applying changes (on the base branch).
+     Record: test count, pass count, fail count. This is the baseline.
+
+     STEP 2 — STATIC ANALYSIS: Run all available linters on the changed files:
+       - TypeScript: `tsc --strict --noEmit` (catches any types, null issues, unused vars)
+       - ESLint: `npx eslint {changed files}` (if .eslintrc exists)
+       - Python: `ruff check {changed files}` (if ruff is available)
+       Report any new lint errors introduced by the Howler's changes.
+
+     STEP 3 — TESTS: Run tests using the Test Impact Map from CONTRACT.md.
+       Report pass/fail counts.
+
+     STEP 4 — BASELINE COMPARISON: Compare post-implementation results to baseline.
+       - If test count DECREASED: report as REGRESSION (blocker)
+       - If pass rate DECREASED: report as REGRESSION (blocker)
+       - If new lint errors introduced: report as LINT_FAIL (warning)
+       - If all tests pass and no regressions: output PASS summary
+
      If any tests fail: output FAIL with test names and error messages.
    ")
    ```
@@ -602,6 +619,14 @@ Agent(isolation="worktree", run_in_background=True, model="sonnet", prompt="
      'Alignment: drifted — [reason]' entry in HOOK.md under Progress.
      If drifted, STOP and correct before continuing.
   7. When types are finalized: mark Checkpoints.types: STABLE in HOOK.md.
+  7.5. POSTCONDITION-TARGETED TESTS: When writing tests for your implementation,
+     generate tests that cover each postcondition in your CONTRACT.md section.
+     For each postcondition, write:
+       - At least one positive test (the postcondition IS satisfied)
+       - At least one negative test (what should NOT work — e.g., unauthorized access
+         is rejected, invalid input throws, missing data returns error)
+     If your CONTRACT.md section has no postconditions (pure-create, nano mode),
+     write tests based on the task spec's "Done When" criteria instead.
   8. COMPLETION VERIFICATION: Before declaring done, verify mechanically:
      - Every file in CREATES exists: ls -la {each file}
      - Every file in MODIFIES has been changed: git diff --name-only
