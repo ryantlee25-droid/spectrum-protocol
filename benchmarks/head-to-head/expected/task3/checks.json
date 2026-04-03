@@ -1,0 +1,14 @@
+{
+  "must_contain": [
+    {
+      "file": "src/utils/validate.ts",
+      "pattern": "limit > config\\.api\\.maxLimit"
+    }
+  ],
+  "must_not_contain": [
+    {
+      "file": "src/utils/validate.ts",
+      "pattern": "limit >= config\\.api\\.maxLimit"
+    }
+  ]
+}

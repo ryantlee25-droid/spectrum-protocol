@@ -1,0 +1,25 @@
+{
+  "must_contain": [
+    {
+      "file": "src/utils/rateLimit.ts",
+      "pattern": "export (function|const)"
+    },
+    {
+      "file": "src/api/users.ts",
+      "pattern": "rateLimit|rate.?[Ll]imit"
+    },
+    {
+      "file": "src/api/posts.ts",
+      "pattern": "rateLimit|rate.?[Ll]imit"
+    },
+    {
+      "file": "src/api/auth.ts",
+      "pattern": "rateLimit|rate.?[Ll]imit"
+    },
+    {
+      "file": "src/config.ts",
+      "pattern": "rateLimit|rate.?[Ll]imit"
+    }
+  ],
+  "must_not_contain": []
+}
