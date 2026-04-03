@@ -1,0 +1,22 @@
+# Task 4: Parallel Pure-Create
+# All original files plus 3 new utility modules and their tests
+package.json
+package-lock.json
+tsconfig.json
+jest.config.js
+src/types.ts
+src/config.ts
+src/api/users.ts
+src/api/posts.ts
+src/api/auth.ts
+src/utils/validate.ts
+src/utils/logger.ts
+src/utils/sanitize.ts
+src/utils/cache.ts
+src/utils/retry.ts
+tests/users.test.ts
+tests/posts.test.ts
+tests/auth.test.ts
+tests/sanitize.test.ts
+tests/cache.test.ts
+tests/retry.test.ts

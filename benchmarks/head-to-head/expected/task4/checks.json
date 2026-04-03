@@ -1,0 +1,21 @@
+{
+  "must_contain": [
+    {
+      "file": "src/utils/sanitize.ts",
+      "pattern": "export function sanitizeHtml"
+    },
+    {
+      "file": "src/utils/sanitize.ts",
+      "pattern": "export function escapeForLog"
+    },
+    {
+      "file": "src/utils/cache.ts",
+      "pattern": "export function createCache"
+    },
+    {
+      "file": "src/utils/retry.ts",
+      "pattern": "export (function|async function) retry"
+    }
+  ],
+  "must_not_contain": []
+}

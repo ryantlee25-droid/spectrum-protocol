@@ -1,0 +1,17 @@
+# Task 1: Rename User to Account
+# Files that must exist after the task (relative to result dir root)
+# These are the same files as the scaffold — no new files created, just modifications
+package.json
+package-lock.json
+tsconfig.json
+jest.config.js
+src/types.ts
+src/config.ts
+src/api/users.ts
+src/api/posts.ts
+src/api/auth.ts
+src/utils/validate.ts
+src/utils/logger.ts
+tests/users.test.ts
+tests/posts.test.ts
+tests/auth.test.ts
