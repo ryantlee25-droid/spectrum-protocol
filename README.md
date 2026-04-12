@@ -1,60 +1,179 @@
-# Spectrum Protocol v5.1
+# Spectrum Protocol v6
 
-**A coordination protocol for parallel AI agents in Claude Code.**
+**Fast parallel execution for Claude Code.**
 
-Spectrum turns Claude Code's sub-agent system from a stateless dispatcher into a stateful, recoverable workspace. Workers maintain durable state, declare file ownership, communicate through structured debriefs, and follow a defined failure/recovery protocol.
+Split tasks. Drop workers. Merge branches. Verify once. Ship.
 
-No dependencies. No build step. No database. Copy four files and you're running.
+No dependencies. No build step. No ceremony. Copy two files and you're running.
+
+---
+
+## Why v6
+
+v5 had 4,100 lines of protocol spec across 7 phases, 14 agents, frozen contracts, adversarial reviews, per-worker quality gates, and crash recovery journals. It was an engineering achievement.
+
+It was also slower and more expensive than a single Sonnet agent on every benchmark we ran.
+
+**v6 keeps what works** (planning, worktree isolation, file ownership, post-merge verification) **and cuts everything that doesn't** (contracts, manifestos, per-worker gates, phase ceremonies, crash journals).
+
+The result: **~25 min and ~100k tokens** vs v5's ~45 min and ~240k tokens. Same quality.
 
 ---
 
 ## Agent Roster
 
-Spectrum defines 14 agents across two tiers: the **core pipeline** (10 agents that run during a spectrum) and **auxiliary agents** (3 agents for adjacent work).
+| Agent | Model | What They Do |
+|-------|-------|-------------|
+| **Gold** | Sonnet | Splits tasks, drops workers, merges branches, runs verification |
+| **Blue** | Sonnet | Scopes work, produces PLAN.md (before spectrum) |
+| **Workers** | Sonnet | Implement tasks in isolated worktrees (parallel) |
+| **White** | Sonnet | Reviews merged diff — tiered verification, loop-aware analysis, INQUIRY format |
+| **Gray** | Sonnet | Runs tests + generates missing tests — batch-generate-validate loops |
+| **Orange** | Sonnet | Root cause debugging — minimize-then-localize, causal chains, scope boundaries |
+| **Copper** | Sonnet | Commits, branches, PRs — file sensitivity filtering, evidence-before-claims |
 
-### Core Pipeline
+7 agents. Each earns its keep. Each has been benchmarked head-to-head against vanilla Claude.
 
-| Color | Glyph | Role | Model | What They Do |
-|-------|-------|------|-------|-------------|
-| **Golds** | &#9819; | Orchestrator | Sonnet | Muster, contracts, seam analysis, merge planning |
-| **Blues** | &#9678; | Planner | Sonnet | Scopes work, produces PLAN.md before spectrum activates |
-| **Howlers** | &#187; | Worker | Sonnet+ | Implements tasks in isolated worktrees (parallel) |
-| **Whites** | &#10022; | Reviewer | Sonnet | Pre-PR diff review, contract compliance |
-| **grays-run** | &#9960; | Tester | Haiku | Runs tests mechanically, reports pass/fail |
-| **Grays** | &#9960; | Diagnostician | Sonnet | Diagnoses test failures, writes missing coverage (on failure only) |
-| **Oranges** | &#10023; | Debugger | Sonnet | Root cause analysis when Howlers hit blockers |
-| **Coppers** | &#9654; | Delivery | Haiku | Commits, branch naming, PR creation |
-| **Obsidians** | &#8856; | Validator | Sonnet | Post-merge spec compliance against PLAN.md |
-| **Browns** | &#8962; | Archivist | Haiku | Drafts LESSONS.md from spectrum artifacts |
-| **Violets** | -- | Designer | Sonnet | Optional: produces DESIGN.md (behavioral spec) for API/schema work |
-| **Politicos** | &#9889; | Critic | Sonnet | Adversarial review of contracts + manifest before freeze |
-
-### Auxiliary Agents
-
-| Color | Glyph | Role | Model | What They Do |
-|-------|-------|------|-------|-------------|
-| **Helldivers** | &#9672; | Researcher | Sonnet | Problem research, validation, opportunity sizing |
-| **Primus** | &#8853; | Strategist | Sonnet | PRDs, prioritization, roadmaps |
-| **Greens** | &#8801; | Decomposer | Sonnet | Breaks specs into scoped tickets |
+Auxiliary agents (not part of spectrum): **Helldivers** (research), **Primus** (strategy), **Greens** (ticket decomposition).
 
 ---
 
-## Protocol Phases
+## v6.1: Agent Specialist Improvements
 
-A Spectrum run follows seven phases:
+Every agent now includes prompt engineering techniques drawn from research on CodeRabbit, Qodo Cover, Sentry Seer, SWE-agent, Graphite, and the Claude Code superpowers/pr-review-toolkit/Trail of Bits plugins. Validated across two benchmark rounds (TypeScript MUD + Go email server).
 
-| Phase | Name | What Happens |
-|-------|------|-------------|
-| 0 | **Blue Plans** | Blue scopes work into PLAN.md (prerequisite, not part of spectrum) |
-| 1 | **Muster** | Gold decomposes tasks, writes MANIFEST.md + CONTRACT.md, defines file ownership |
-| 1.5 | **The Passage** | Politico adversarially reviews the manifest and contract before freeze |
-| 2 | **The Drop** | Gold spawns Howlers per DAG as dependencies are satisfied |
-| 3 | **The Proving** | Each Howler runs triple quality gate: White + Gray + security review |
-| 4 | **The Forge** | Failed Howlers are diagnosed, classified, and recovered or escalated |
-| 5 | **Pax** | Gold independently validates all Howler work, cross-references seams, writes merge plan |
-| 6 | **Triumph** | Human merges PRs, Gray runs integration tests, Obsidian verifies spec compliance |
+### Techniques Applied
 
-Every phase writes to `CHECKPOINT.json`, enabling resume-from-any-point if a session dies.
+| Technique | What It Does | Which Agents |
+|-----------|-------------|-------------|
+| **Iron Laws** | Absolute rules preventing phase-skipping | All |
+| **Rationalization Tables** | Pre-debunked excuses for shortcutting | All |
+| **Red Flag Lists** | Behavioral tripwires for self-monitoring | All |
+| **Tiered Verification** | Reasoning certificates (no tool call) for WARNINGs, batched scripts for BLOCKERs | White |
+| **Verification Budget** | MAX_VERIFICATION_CALLS = 15 with batch fallback | White |
+| **Loop-Aware Analysis** | Explicit check for repeated side effects in loops | White |
+| **INQUIRY Format** | Inconclusive findings → questions, not assertions | White |
+| **Batch-Generate-Validate** | Generate 3-5 tests per call, validate all, retry only failures | Gray |
+| **Failed Test Accumulator** | Prevents re-generating the same broken test patterns | Gray |
+| **Style Template Extraction** | Read existing tests once, reuse pattern for all generated tests | Gray |
+| **Minimize-Then-Localize** | Find minimal reproduction before reasoning about root cause | Orange |
+| **Causal Chain Construction** | Symptom ← Cause ← Condition ← Root Decision | Orange |
+| **Scope Boundaries** | Orange runs specific test only; full suite is Gray's job | Orange |
+| **File Sensitivity Filter** | Warn before staging research docs, env files, credentials | Copper |
+| **Evidence-Before-Claims** | Verify every state-changing operation before reporting success | Copper |
+| **Freshness Gate** | Verify plan references against current code before execution | Blue |
+| **Hard Scope Gate** | Resolve ambiguities before task decomposition | Blue |
+
+### Benchmark Results
+
+**TypeScript benchmark** (The Remnant MUD, 109 files, 50k LOC):
+
+| Task | Agent vs Vanilla | Result |
+|------|-----------------|--------|
+| Code review | White v3 vs Claude | Tie on bug detection, White has better evidence quality |
+| Debugging | Orange vs Claude | Both found root cause; Orange wrote regression test |
+| Test generation | Gray v3 vs Claude | Gray: 90 tests vs 63, coverage report, 33% faster |
+| Planning | Blue vs Claude | Blue: structured plan in 2 min; vanilla: full impl in 33 min |
+
+**Go benchmark** (mailpit, 89 files, 15k LOC):
+
+| Task | Agent vs Vanilla | Result |
+|------|-----------------|--------|
+| Code review (3 seeded bugs) | White: 2/3, Vanilla: 3/3 | Vanilla won — White missed loop bug (now fixed) |
+| Debugging (timezone clobber) | Both found root cause | Orange won — wrote regression test, stayed in scope |
+| Test generation (validators) | Gray: 90 tests, Vanilla: 63 | Gray won — more tests, coverage report, self-fixed 2 bugs |
+| Planning (webhook retry) | Blue: plan in 2 min | Blue: better structure, identified file conflict + goroutine leak |
+
+---
+
+## Memory Integration (Optional)
+
+When used with [Tages](https://github.com/ryantlee25-droid/tages) or similar project memory:
+
+- Include a **memory brief** in each worker's drop prompt
+- Memory sweet spot: **40-70 memories** per project, focused on patterns not facts
+- **Benchmark result** (54 runs, 4 codebases): agents + memory compound for **-25% time, -10% tokens** vs either alone
+- Memory helps most when the codebase has **few examples** of the needed pattern
+- Stale memories don't poison output — agents cross-check against current code
+
+Without memory, agents still work — memory is an efficiency multiplier, not a dependency.
+
+---
+
+## The Protocol (4 Steps)
+
+### 1. Split (~2 min)
+
+Gold reads PLAN.md and writes **SPLIT.md** — the only ceremony artifact:
+
+```markdown
+# SPLIT.md
+Rain: auth-feature-0405
+
+## Workers
+- worker-auth: "Implement auth middleware" → CREATES: lib/auth.ts, MODIFIES: lib/server.ts
+- worker-ui: "Add login form" → CREATES: components/Login.tsx, MODIFIES: app/page.tsx
+- worker-tests: "Write auth tests" → CREATES: tests/auth.test.ts (depends: worker-auth)
+
+## Ownership
+lib/auth.ts → worker-auth
+lib/server.ts → worker-auth
+components/Login.tsx → worker-ui
+app/page.tsx → worker-ui
+tests/auth.test.ts → worker-tests
+```
+
+**If Gold can't split without file conflicts: don't use Spectrum.** Run single-agent.
+
+### 2. Drop (~1 min)
+
+Gold creates worktrees and drops workers in parallel:
+
+```bash
+git worktree add -b spectrum/<rain>/<worker> \
+  .claude/spectrum/<rain>/<worker> HEAD
+```
+
+Each worker gets its task, file ownership list, and optionally a memory brief. One rule: **only touch files in your list. Commit when done.**
+
+### 3. Merge (~3 min)
+
+As each worker completes:
+1. Merge worker branch to integration branch
+2. If merge conflict: Gold resolves (or asks human for complex ones)
+3. After all merged: quick type check to verify interfaces match
+
+### 4. Verify (~5 min)
+
+Run everything **once** on the **merged result**:
+
+```bash
+tsc --noEmit        # or go vet, mypy
+vitest run          # or go test, pytest
+```
+
+Optional: White reviews the full merged diff. One review that sees everything > six reviews that each see a fragment.
+
+**Done.** Copper opens the PR.
+
+---
+
+## When to Use Spectrum
+
+All three must be true:
+- **3+ genuinely independent tasks** that don't share files
+- **PLAN.md exists** (Blue writes this first)
+- **Wall-clock speed matters** more than the ~10 min coordination overhead
+
+For everything else: single agent. A single Sonnet session handles ~200k tokens of work reliably.
+
+---
+
+## Failure Handling
+
+- **Worker fails**: Gold drops a replacement with the error context. Max 2 retries.
+- **Merge conflict**: Gold resolves trivial ones. Complex ones go to human.
+- **Tests fail post-merge**: Orange diagnoses the specific failure. Sequential follow-up.
 
 ---
 
@@ -69,90 +188,19 @@ curl -fsSL https://raw.githubusercontent.com/ryantlee25-droid/spectrum-protocol/
 ### Or manually
 
 ```bash
-# 1. Copy the protocol files
+# Copy protocol files
 cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
-cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
 cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
 
-# 2. Copy agent definitions
+# Copy agent definitions
 mkdir -p ~/.claude/agents && cp agents/*.md ~/.claude/agents/
 
-# 3. Copy tooling
-mkdir -p ~/.claude/hooks && cp tools/seam_check.py ~/.claude/hooks/
-
-# Done. No dependencies. No build step.
+# Done.
 ```
 
-Then tell Claude Code: "Plan and build the auth system, dashboard, and API layer in parallel."
+Then tell Claude Code: *"Plan and build the auth system, dashboard, and API layer in parallel."*
 
-Gold will activate, run muster, and present a manifest for your approval before any Howlers are dropped.
-
-**New to Spectrum?** Read the [Tutorial](TUTORIAL.md) for a full walkthrough. Keep the [Cheat Sheet](CHEATSHEET.md) handy.
-
----
-
-## Feature Highlights
-
-### File Ownership Matrix
-Every file that will be created or modified is assigned to exactly one Howler. No overlaps, verified during muster and by the Politico. If two Howlers need the same file, Gold restructures the tasks.
-
-### Frozen Contracts
-CONTRACT.md is frozen at drop time. If a Howler discovers the contract is wrong, it stops and escalates -- it never silently diverges. Breaking changes require an AMENDMENT.md and Gold intervention.
-
-### Design-by-Contract Per Worker
-Each Howler gets formal preconditions, postconditions, and invariants in CONTRACT.md. Interface-heavy Howlers get full DbC; pure-create Howlers get conventions-only. No other multi-agent system surveyed implements this.
-
-### Adversarial Plan Review (The Passage)
-Before freezing the contract, Gold spawns a Politico -- an independent Sonnet agent that tries to break the plan. It looks for file ownership gaps, contract ambiguities, and decomposition flaws. Blockers must be fixed before Howlers drop.
-
-### Independent Validation (Pax)
-Gold does not trust Howler self-reports. During integration, Gold reads key files each Howler created and verifies them against CONTRACT.md postconditions. Discrepancies are flagged as integration risks.
-
-### Typed Failure Taxonomy
-Failures are classified into 5 types: `transient`, `logical`, `structural`, `environmental`, `conflict`. Each has a defined recovery path. A circuit breaker auto-escalates after 2 failures on the same locus.
-
-### Durable State (HOOK.md)
-Every Howler writes a HOOK.md immediately on start and updates it continuously. If a session dies, a new Howler can resume from the last checkpoint without repeating completed work.
-
-### Triple Quality Gate
-Before any PR opens: White (code review) + Gray (tests) + security diff review, all in parallel. Security criticals block. Coverage gaps warn but don't block.
-
-### Reaping Mode
-For small spectrum runs (3-4 Howlers, all creating new files, no shared interfaces), reaping mode cuts muster from ~8 minutes to ~3 minutes while keeping all quality gates intact.
-
-### Budget Tracking
-Optional token/cost budgets in CHECKPOINT.json. Gold checks cumulative cost before each Howler drop and presents options if the spectrum is projected to exceed budget.
-
----
-
-## Best For
-
-- **3-8 parallel agents** working on a mid-sized codebase
-- Teams who want **safety guarantees** (file ownership, frozen contracts, adversarial review) over raw speed
-- Projects where **failed parallel work is expensive** (the protocol prevents wasted effort through upfront planning)
-- Claude Code users who want to **coordinate sub-agents** without installing a binary or running a daemon
-- Teams building features that span **multiple domains** (auth + API + UI + tests)
-
-## Not For
-
-- **20+ agents at scale** -- use [Gas Town](https://github.com/steveyegge/gastown) (compiled Go, daemon architecture, built for high agent counts)
-- **Zero-config quick start** -- use [oh-my-claudecode](https://github.com/nicekid1/oh-my-claudecode) (17k+ stars, community CLAUDE.md presets, no ceremony)
-- **Single-agent tasks** -- Spectrum activates only for 3+ parallel features. For everything else, use Claude Code's standard agent routing.
-- **Non-Claude-Code environments** -- Spectrum is built specifically for Claude Code's sub-agent and worktree primitives
-
----
-
-## Evaluation
-
-Spectrum was evaluated against **28 multi-agent systems** across four categories: Claude Code orchestrators, general-purpose frameworks (CrewAI, LangGraph, MetaGPT), commercial autonomous agents (Devin, Factory), and AI IDEs (Cursor, Kiro, Windsurf).
-
-Key findings from the evaluation:
-
-- **Three capabilities are unique to Spectrum** across all 28 systems: Design-by-Contract per worker, adversarial plan review (Politico), and independent Gold validation of worker self-reports
-- Spectrum leads in coordination rigor (failure taxonomy, contract management, merge planning, quality gates)
-- The field is converging on patterns Spectrum already implements: spec-before-code, git worktree isolation, quality gates before merge, model routing by task complexity
-
-Evaluation documents (competitive audits, cost analyses, benchmarks) are on the [`research`](https://github.com/ryantlee25-droid/spectrum-protocol/tree/research/evaluation) branch.
+**New to Spectrum?** Read the [Tutorial](TUTORIAL.md). Keep the [Cheat Sheet](CHEATSHEET.md) handy.
 
 ---
 
@@ -160,55 +208,46 @@ Evaluation documents (competitive audits, cost analyses, benchmarks) are on the 
 
 ```
 spectrum-protocol/
-├── README.md                  # You are here
-├── LICENSE                    # MIT
-├── INSTALL.md                 # Quick installation guide
-├── TUTORIAL.md                # Step-by-step first run walkthrough
-├── CHEATSHEET.md              # One-page quick reference
-├── install.sh                 # One-line installer script
-├── ACKNOWLEDGMENTS.md         # Credits and inspiration
+├── README.md              # You are here
 ├── spectrum/
-│   ├── CLAUDE.md              # Main routing config (copy to ~/.claude/)
-│   ├── SPECTRUM-OPS.md        # Operator's manual (~550 lines)
-│   └── SPECTRUM.md            # Full specification (~2,300 lines)
+│   ├── CLAUDE.md          # Routing config (copy to ~/.claude/)
+│   ├── SPECTRUM.md        # Full v6 spec
+│   ├── HOWLER-OPS.md      # Worker ops manual
+│   ├── SPECTRUM-OPS.md    # Gold ops manual
+│   └── *-V5.md            # Historical v5 files
 ├── agents/
-│   ├── golds.md               # Orchestrator
-│   ├── blues.md               # Planner
-│   ├── howlers.md             # Worker
-│   ├── whites.md              # Reviewer
-│   ├── grays.md               # Tester
-│   ├── oranges.md             # Debugger
-│   ├── coppers.md             # Delivery
-│   ├── obsidians.md           # Validator
-│   ├── browns.md              # Archivist
-│   ├── violets.md             # Designer
-│   ├── politicos.md           # Critic
-│   ├── helldivers.md          # Researcher
-│   ├── primus.md              # Strategist
-│   └── greens.md              # Decomposer
-├── tools/
-│   └── seam_check.py          # Seam validation tool
-├── examples/
-│   ├── MANIFEST.md            # Sample manifest
-│   ├── CONTRACT.md            # Sample contract
-│   ├── HOOK.md                # Sample Howler state
-│   └── debrief.md             # Sample debrief
-└── UPGRADE.md                 # Migration guide
+│   ├── golds.md           # Parallel dispatcher
+│   ├── blues.md           # Planner (iron law: read code before planning)
+│   ├── howlers.md          # Workers (parallel implementers)
+│   ├── whites.md          # Reviewer (tiered verification, loop-aware, INQUIRYs)
+│   ├── grays.md           # Tester (batch-generate-validate, style matching)
+│   ├── oranges.md         # Debugger (minimize-then-localize, scope boundaries)
+│   ├── coppers.md         # Delivery (sensitivity filter, evidence-before-claims)
+│   ├── helldivers.md      # Researcher (auxiliary)
+│   ├── primus.md          # Strategist (auxiliary)
+│   └── greens.md          # Decomposer (auxiliary)
+├── tools/                 # Optional tooling
+├── install.sh
+├── INSTALL.md
+├── TUTORIAL.md
+├── CHEATSHEET.md
+├── UPGRADE.md
+└── LICENSE
 ```
 
 ---
 
-## Token Costs
+## Naming: The Red Rising Theme
 
-Spectrum runs on standard Claude Code API pricing. No additional costs.
+Agent names are drawn from Pierce Brown's [Red Rising saga](https://www.piercebrown.com/). Golds command. Workers execute. Whites judge. The theme makes agents instantly recognizable in logs.
 
-| Spectrum Size | Estimated Total Tokens | Estimated Cost |
-|---------------|----------------------|----------------|
-| 3-Howler (Reaping) | ~400,000 | ~$2.80 |
-| 5-Howler (Full) | ~750,000 | ~$3.90-4.50 |
-| 8-Howler (Full) | ~1,100,000 | ~$7.50-9.00 |
+---
 
-v5.1 reduces costs 30-40% vs v5.0 through Gray split (Haiku for pass-path), model routing (/diff-review on Haiku for non-security), proportional quality gates, and pipeline short-circuits.
+## Lineage
+
+Built on ideas from [**steveyegge/gastown**](https://github.com/steveyegge/gastown) (persistent state, structured communication). Agent techniques drawn from CodeRabbit (verify-before-commenting), Qodo Cover (generate-run-validate loops), Sentry Seer (minimize-then-localize), SWE-agent (bounded output, verification budgets), Graphite (conservative thresholds), and the superpowers/pr-review-toolkit/Trail of Bits Claude Code plugins (iron laws, rationalization tables, red flag lists).
+
+See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
 
 ---
 
@@ -216,66 +255,27 @@ v5.1 reduces costs 30-40% vs v5.0 through Gray split (Haiku for pass-path), mode
 
 [MIT](LICENSE)
 
----
-
-## Naming: The Red Rising Theme
-
-Spectrum's agent names are drawn from the **Color caste system** in Pierce Brown's [Red Rising saga](https://www.piercebrown.com/) — a science fiction series where society is stratified into Colors, each with a defined role. Golds command. Howlers execute the impossible. Whites judge. Obsidians guard the line.
-
----
-
-## Lineage & Inspiration
-
-Spectrum exists because of [**steveyegge/gastown**](https://github.com/steveyegge/gastown) (13k+ stars), the first serious multi-agent orchestration system for Claude Code. Gas Town proved that parallel agents need persistent state (HOOK.md), structured communication (mailboxes), and health checks to work reliably.
-
-**How Spectrum differs from Gas Town:**
-
-| | Gas Town | Spectrum |
-|---|---|---|
-| Format | Compiled Go binary + daemon | Protocol-as-CLAUDE.md (plain text) |
-| Installation | `go install` + config | Copy 3 files |
-| Agent model | Generic workers | Typed Colors with defined responsibilities |
-| Coordination | Health checks + message passing | Frozen contracts + file ownership matrix + DAG dispatch |
-| Failure handling | Health check timeouts | Typed failure taxonomy (5 classes) + circuit breakers |
-| Plan review | None | Adversarial Politico review before freeze |
-| Integration | Post-merge validation | Independent Gold validation of worker self-reports |
-
-Gas Town is the better choice for large-scale deployments (20+ agents) and teams who want a production daemon. Spectrum is the better choice for teams who want protocol-level safety guarantees without installing anything.
-
-### Additional Acknowledgments
-
-- [**Pierce Brown**](https://www.piercebrown.com/) — Red Rising created the Color system that makes Spectrum's agent roles instantly recognizable
-- [**Anthropic**](https://docs.anthropic.com/en/docs/claude-code) — Claude Code's sub-agent and worktree primitives are the foundation Spectrum builds on
-- **The ecosystem** — [Overstory](https://github.com/jayminwest/overstory) (structural tool enforcement), [Citadel](https://github.com/SethGammon/Citadel) (machine-verifiable phase conditions), [metaswarm](https://github.com/dsifry/metaswarm) (adversarial review gates), and [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (context preservation) each contributed innovations that influenced v4.0
-
-See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for full credits.
-
 ## Release Notes
 
-### 2026-04-01 — v5.1: Cost Optimization (30-40% reduction)
+### 2026-04-12 — v6.1: Agent Specialist Improvements
 
-**Token and cost overhaul** targeting the three pressure zones: Howler context injection, quality gate overhead, and Gold output verbosity.
+All 7 core agents rewritten with prompt engineering techniques validated across two benchmark rounds (TypeScript + Go):
 
-- **CLAUDE.md slimmed from 358→132 lines** — inline Spectrum phase descriptions replaced with pointers to SPECTRUM-OPS.md. Every non-Spectrum session saves ~226 lines of context.
-- **New: HOWLER-OPS.md** — Howler-only procedural reference (~2,500 tokens), replacing full SPECTRUM-OPS.md injection. Saves ~10K tokens per Howler.
-- **Gray split**: New `grays-run` agent (Haiku) handles mechanical test execution. `grays` (Sonnet) invoked only on failure. Saves ~$0.70/run.
-- **Model routing**: /diff-review uses Haiku for non-security Howlers, Sonnet for security-tagged. Self-reflect moved to Haiku.
-- **Proportional quality gates**: Gate depth scales with task risk profile (full/reaping/nano).
-- **Pipeline short-circuits**: Skip Gray for doc-only changes, skip /diff-review for non-security, spot-check White for high-confidence reaping.
-- **Coordination tax formula**: $0.43/Howler overhead quantified — prevents over-decomposition.
-- **Confidence-tiered Pax validation**: Gold reads fewer files for high-confidence Howlers.
-- **HOOK.md compactness rules**: 1,500 token target, YAML checkpoints, empty section removal.
-- **Gold conciseness directive**: Token discipline at muster and Pax. SEAM-CHECK.md as authoritative source (no re-derivation).
-- **Batch operations + read-once rule**: Fewer Howler turns = less sliding window tax.
-- **Per-Howler CONTRACT.md slicing**: ~1,800 tokens per Howler vs full 3,500.
+- **White**: Tiered verification (reasoning certificates + batched tool calls), loop-aware analysis, INQUIRY format for inconclusive findings, MAX_VERIFICATION_CALLS = 15
+- **Gray**: Batch-generate-validate (3-5 tests per call), style template extraction, failed test accumulator
+- **Orange**: Minimize-then-localize, causal chain construction, scope boundaries (runs specific test only, not full suite)
+- **Blue**: Freshness gate, type system audit, hard scope gate, effort calibration with serial task multiplier
+- **Copper**: Upgraded from Haiku to Sonnet, file sensitivity filter, auto-branch guard fix, evidence-before-claims
+- **Gold**: Simplified to thin dispatcher (SPLIT.md only)
+- **Workers**: Simplified to implement-and-commit (no HOOK.md, no debriefs)
+- **Memory integration**: Documented Tages coupling — agents + memory compound for -25% time
 
-### 2026-03-31 — Gold Model Downgrade: Opus → Sonnet
+### 2026-04-04 — v6.0: The Lightweight Overhaul
 
-**Gold agent model changed from Opus to Sonnet** across all protocol files, based on a structured evaluation (spectrum `gold-eval-0331`).
+Complete protocol rewrite based on three head-to-head benchmarks where raw Sonnet beat v5.
 
-- Built a reusable evaluation framework: 18 benchmark scenarios, machine-checkable rubrics, Python harness (179 tests), and scoring engine
-- Ran 12 head-to-head evaluations (6 scenarios x 2 models) across Muster, Pax, and Forge phases
-- **Results**: Sonnet scored 0.94 composite vs Opus 1.00, passing all phase thresholds (Muster 0.95/0.85, Pax 0.90/0.80, Forge 1.00/0.90)
-- **Cost impact**: 91% reduction in Gold phase costs (~$3.50/spectrum saved)
-- **One caveat**: Sonnet over-classifies severity in Pax (promotes observations to blockers). Mitigated by human review of Pax findings before actioning.
-- Full report on the [`research`](https://github.com/ryantlee25-droid/spectrum-protocol/tree/research/evaluation/gold-comparison) branch
+- Protocol reduced from 4,100 lines to ~200 lines
+- 7 phases → 4 steps (Split → Drop → Merge → Verify)
+- 14 agents → 7 agents
+- Per-worker quality gates → single post-merge verification
+- ~50% faster, ~60% cheaper than v5
