@@ -6,15 +6,17 @@
 
 ## Agent Routing
 
-| User says... | Route to |
-|---|---|
-| "commit my changes" | Copper |
-| "open a PR / MR" | Copper |
-| "why is this test failing?" | Orange |
-| "run the tests" | Gray |
-| "review my changes" | White |
-| "write a plan for X" | Blue |
-| 3+ independent tasks | Gold (parallel dispatch) |
+**Always route to the specialist agent.** Do not handle these tasks directly — the agents have verification pipelines, iron laws, and calibrated techniques that produce better results than ad-hoc work.
+
+| User says... | Route to | Do NOT handle directly |
+|---|---|---|
+| "commit my changes" | Copper | Copper has file sensitivity filtering |
+| "open a PR / MR" | Copper | Copper verifies PR creation |
+| "why is this test failing?" | Orange | Orange has minimize-then-localize |
+| "run the tests" | Gray | Gray has batch-generate-validate |
+| "review my changes" | White | White has tiered verification + loop analysis |
+| "write a plan for X" | Blue | Blue has freshness gates + file conflict detection |
+| 3+ independent tasks | Gold | Gold manages file ownership + post-merge gate |
 
 ---
 
