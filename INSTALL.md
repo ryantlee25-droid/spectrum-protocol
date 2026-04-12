@@ -1,45 +1,37 @@
 # Installation
 
-Spectrum Protocol requires no dependencies, no build step, and no database. It runs entirely as configuration files for Claude Code.
+Spectrum requires no dependencies, no build step, and no database. It runs as configuration files for Claude Code.
 
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and working
 - A `~/.claude/` directory (created automatically by Claude Code)
-- A `~/.claude/agents/` directory (create it if it doesn't exist)
-- A `~/.claude/hooks/` directory (create it if it doesn't exist)
 
-## Steps
-
-### 1. Copy the protocol files
+## One-Line Install
 
 ```bash
-# From the spectrum-protocol repository root:
+curl -fsSL https://raw.githubusercontent.com/ryantlee25-droid/spectrum-protocol/main/install.sh | bash
+```
+
+## Manual Install
+
+### 1. Copy protocol files
+
+```bash
 cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
-cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
 cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
 ```
 
-**Note:** If you already have a `~/.claude/CLAUDE.md`, back it up first:
+**If you already have a `~/.claude/CLAUDE.md`**, back it up first:
 
 ```bash
 cp ~/.claude/CLAUDE.md ~/.claude/CLAUDE.md.backup
-```
-
-Spectrum's CLAUDE.md replaces it entirely. If you have custom rules you want to keep (project-specific conventions, personal preferences, other agent configs), merge them into Spectrum's CLAUDE.md after copying:
-
-```bash
-# Copy Spectrum's version
 cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
-
-# Then open and add your custom sections at the bottom:
-# - Project-specific conventions
-# - Custom routing rules
-# - Personal behavior preferences
-# Spectrum's CLAUDE.md has clear section headers so merging is straightforward.
 ```
 
-Alternatively, put project-specific overrides in a project-level `CLAUDE.md` at your repo root — Claude Code reads both files and the project-level one takes precedence.
+Then merge any custom sections from your backup into the bottom of the new file.
+
+Alternatively, use a project-level `CLAUDE.md` at your repo root — Claude Code reads both.
 
 ### 2. Copy agent definitions
 
@@ -48,18 +40,9 @@ mkdir -p ~/.claude/agents
 cp agents/*.md ~/.claude/agents/
 ```
 
-This installs all 14 agent definitions (Golds, Blues, Howlers, Whites, Grays, Oranges, Coppers, Obsidians, Browns, Violets, Politicos, Helldivers, Primus, Greens) plus backward-compatibility symlinks (mayor→golds, rider→howlers, etc.) so Claude Code's built-in `subagent_type` names continue to work.
+This installs 10 agent definitions: Gold, Blue, Workers (Howlers), White, Gray, Orange, Copper, plus auxiliaries (Helldivers, Primus, Greens).
 
-### 3. Copy tooling
-
-```bash
-mkdir -p ~/.claude/hooks
-cp tools/seam_check.py ~/.claude/hooks/seam_check.py
-```
-
-The seam check tool is used by Gold during the Pax phase to cross-reference seams and assumptions across Howler debriefs.
-
-### 4. Verify
+### 3. Verify
 
 Start a new Claude Code session and ask:
 
@@ -67,44 +50,36 @@ Start a new Claude Code session and ask:
 What agents do you have available?
 ```
 
-You should see the full Spectrum roster listed. Then try:
+You should see the Spectrum roster. Then try:
 
 ```
 Plan and build [your feature] in parallel.
 ```
 
-Gold will activate and begin the muster phase.
-
 ## That's It
 
-No `npm install`. No `pip install`. No `go build`. No environment variables. No daemon to run.
+No `npm install`. No `pip install`. No environment variables. No daemon.
 
-The protocol lives in your `~/.claude/` directory as plain markdown files. Claude Code reads them on every session start.
+The protocol lives in `~/.claude/` as plain markdown. Claude Code reads it on every session start.
+
+## Optional: Memory Integration
+
+For additional efficiency (-25% time), set up [Tages](https://github.com/ryantlee25-droid/tages) for project memory. Spectrum agents automatically use memory briefs when available.
 
 ## Updating
-
-To update Spectrum, pull the latest version of this repository and re-copy the files:
 
 ```bash
 cd spectrum-protocol
 git pull
 cp spectrum/CLAUDE.md ~/.claude/CLAUDE.md
-cp spectrum/SPECTRUM-OPS.md ~/.claude/SPECTRUM-OPS.md
 cp spectrum/SPECTRUM.md ~/.claude/SPECTRUM.md
 cp agents/*.md ~/.claude/agents/
-cp tools/seam_check.py ~/.claude/hooks/seam_check.py
 ```
 
 ## Uninstalling
 
-Remove the Spectrum files:
-
 ```bash
 rm ~/.claude/CLAUDE.md
-rm ~/.claude/SPECTRUM-OPS.md
 rm ~/.claude/SPECTRUM.md
-rm ~/.claude/hooks/seam_check.py
-rm ~/.claude/agents/{golds,blues,howlers,whites,grays,oranges,coppers,obsidians,browns,violets,politicos,helldivers,primus,greens}.md
+rm ~/.claude/agents/{golds,blues,howlers,whites,grays,oranges,coppers,helldivers,primus,greens}.md
 ```
-
-This leaves your `~/.claude/` directory intact for standard Claude Code usage.
